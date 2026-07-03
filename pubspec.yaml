@@ -2,6 +2,7 @@ name: amap_native_plugin
 description: Flutter plugin for embedding native AMap views with circle geofence drawing on Android and iOS.
 version: 0.0.1
 homepage: https://pub.dev/packages/amap_native_plugin
+repository: https://github.com/wangweicheng7/amap_native_plugin.git
 topics:
   - amap
   - map
