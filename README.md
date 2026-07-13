@@ -2,8 +2,8 @@
 
 A Flutter plugin for embedding native AMap map views on Android and iOS.
 
-The plugin currently focuses on map display and circle geofence drawing. It does
-not implement geofence enter or exit business events.
+The plugin provides map display and native drawing overlays. It does not
+implement geofence enter or exit business events.
 
 ## Features
 
@@ -12,6 +12,7 @@ not implement geofence enter or exit business events.
 - Draw one or more circle geofences by center point and radius, with a dashed border.
 - Update circle geofence radius and center at runtime.
 - Place native map pins by coordinate and react to map tap events.
+- Draw and update native polylines with custom colors and widths.
 - Listen for map camera movement and idle events.
 - Overlay custom Flutter center pins for map-center selection flows.
 - Optionally show the user's location after the host app handles permissions.
@@ -22,7 +23,7 @@ Add the package to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  amap_native_plugin: ^0.0.1
+  amap_native_plugin: ^0.1.0
 ```
 
 ## Initialization
@@ -107,6 +108,29 @@ AmapMapView(
   onMapTap: (position) {
     // Update your pin state with the tapped coordinate.
   },
+);
+```
+
+## Polyline Drawing
+
+Use `polylines` to draw routes from coordinates. Updating the list updates the
+native overlays without recreating the map view.
+
+```dart
+AmapMapView(
+  initialCenter: const AmapLatLng(31.2304, 121.4737),
+  initialZoom: 14,
+  polylines: const [
+    AmapMapPolyline(
+      points: [
+        AmapLatLng(31.2304, 121.4737),
+        AmapLatLng(31.2320, 121.4760),
+        AmapLatLng(31.2340, 121.4780),
+      ],
+      color: Color(0xFFFF5B00),
+      width: 6,
+    ),
+  ],
 );
 ```
 

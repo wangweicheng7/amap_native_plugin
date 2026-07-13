@@ -4,10 +4,10 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'amap_native_plugin'
-  s.version          = '0.0.1'
+  s.version          = '0.1.0'
   s.summary          = 'Flutter plugin for native AMap map views.'
   s.description      = <<-DESC
-Flutter plugin for embedding native AMap views with circle geofence drawing on Android and iOS.
+Flutter plugin for native AMap views with pins, polylines, and circle geofences on Android and iOS.
                        DESC
   s.homepage         = 'https://pub.dev/packages/amap_native_plugin'
   s.license          = { :file => '../LICENSE' }

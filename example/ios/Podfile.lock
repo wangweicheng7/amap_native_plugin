@@ -1,0 +1,33 @@
+PODS:
+  - AMap3DMap (11.2.000):
+    - AMapFoundation (>= 1.9.0)
+  - amap_native_plugin (0.1.0):
+    - AMap3DMap
+    - Flutter
+  - AMapFoundation (1.9.0)
+  - Flutter (1.0.0)
+
+DEPENDENCIES:
+  - amap_native_plugin (from `.symlinks/plugins/amap_native_plugin/ios`)
+  - Flutter (from `Flutter`)
+
+SPEC REPOS:
+  trunk:
+    - AMap3DMap
+    - AMapFoundation
+
+EXTERNAL SOURCES:
+  amap_native_plugin:
+    :path: ".symlinks/plugins/amap_native_plugin/ios"
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  AMap3DMap: 940c6f6ce6ff3089c5c2211b0dfb51ef43262fe8
+  amap_native_plugin: 569ae1de3e1a89d2db996e9ca4fa8a2cc696231d
+  AMapFoundation: 5f01fcabd1e591967e52178d2d96dac843396285
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+
+PODFILE CHECKSUM: 47a757a7853adf00f34d8294fd2037725e0d47ac
+
+COCOAPODS: 1.16.2
