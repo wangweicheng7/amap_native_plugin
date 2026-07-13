@@ -58,6 +58,16 @@ class ExamplesHomePage extends StatelessWidget {
             subtitle: '拖动地图选择中心点，滑块实时调整围栏半径。',
             builder: (_) => const GeofenceEditorPage(),
           ),
+          ExampleListTile(
+            title: '地图大头针放置',
+            subtitle: '点击地图在原生层放置一个大头针。',
+            builder: (_) => const PinPlacementPage(),
+          ),
+          ExampleListTile(
+            title: '围栏大头针示例',
+            subtitle: '一个地理围栏，围栏内外各放置大头针。',
+            builder: (_) => const GeofencePinDemoPage(),
+          ),
         ],
       ),
     );
@@ -141,6 +151,7 @@ class StaticGeofencePage extends StatelessWidget {
       body: const AmapMapView(
         initialCenter: _center,
         initialZoom: 13,
+        centerPin: _CenterPin(color: Color(0xFF2563EB)),
         circleGeofences: [
           AmapCircleGeofence(
             center: _center,
@@ -189,7 +200,7 @@ class _GeofenceEditorPageState extends State<GeofenceEditorPage> {
               initialCenter: _initialCenter,
               initialZoom: 14,
               centerPin: const _CenterPin(color: Color(0xFF2563EB)),
-              movingCenterPin: const _CenterPin(color: Color(0xFFF97316)),
+              // movingCenterPin: const _CenterPin(color: Color(0xFFF97316)),
               onCameraMove: (_) {
                 if (_isDraggingMap) {
                   return;
@@ -269,6 +280,132 @@ class _GeofenceEditorPageState extends State<GeofenceEditorPage> {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PinPlacementPage extends StatefulWidget {
+  const PinPlacementPage({super.key});
+
+  @override
+  State<PinPlacementPage> createState() => _PinPlacementPageState();
+}
+
+class _PinPlacementPageState extends State<PinPlacementPage> {
+  static const _initialCenter = AmapLatLng(31.2304, 121.4737);
+  AmapLatLng? _pin;
+
+  @override
+  Widget build(BuildContext context) {
+    final pins = _pin == null
+        ? const <AmapMapPin>[]
+        : <AmapMapPin>[
+            AmapMapPin(position: _pin!, title: '已放置大头针', snippet: '点击地图可重新放置'),
+          ];
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('地图大头针放置')),
+      body: Column(
+        children: [
+          Expanded(
+            child: AmapMapView(
+              initialCenter: _initialCenter,
+              initialZoom: 12,
+              pins: pins,
+              onMapTap: (position) {
+                setState(() {
+                  _pin = position;
+                });
+              },
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _pin == null
+                          ? '点击地图任意位置放置一个大头针。'
+                          : '大头针：${_pin!.latitude.toStringAsFixed(6)}, ${_pin!.longitude.toStringAsFixed(6)}',
+                    ),
+                  ),
+                  if (_pin != null)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _pin = null;
+                        });
+                      },
+                      child: const Text('清除'),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class GeofencePinDemoPage extends StatelessWidget {
+  const GeofencePinDemoPage({super.key});
+
+  static const _center = AmapLatLng(30.2741, 120.1551);
+  static const _insidePin = AmapMapPin(
+    position: AmapLatLng(30.2747, 120.1558),
+    title: '围栏内',
+    snippet: '位于地理围栏内部',
+  );
+  static const _outsidePinOne = AmapMapPin(
+    position: AmapLatLng(30.286, 120.165),
+    title: '围栏外 1',
+    snippet: '位于地理围栏外部',
+  );
+  static const _outsidePinTwo = AmapMapPin(
+    position: AmapLatLng(30.264, 120.142),
+    title: '围栏外 2',
+    snippet: '位于地理围栏外部',
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('围栏大头针示例')),
+      body: Column(
+        children: [
+          Expanded(
+            child: AmapMapView(
+              initialCenter: _center,
+              initialZoom: 13,
+              circleGeofences: const [
+                AmapCircleGeofence(
+                  center: _center,
+                  radiusMeters: 900,
+                  strokeColor: Color(0xFF2563EB),
+                  fillColor: Color(0x332563EB),
+                  strokeWidth: 4,
+                ),
+              ],
+              pins: const [_insidePin, _outsidePinOne, _outsidePinTwo],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Row(
+                children: const [
+                  Expanded(child: Text('蓝色圆形为地理围栏，围栏内放 1 颗，围栏外放 2 颗大头针。')),
+                ],
               ),
             ),
           ),

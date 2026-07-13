@@ -40,4 +40,49 @@ void main() {
       'androidPrivacyAgreed': true,
     });
   });
+
+  test('pins update is forwarded to the platform view channel', () async {
+    const viewChannel = MethodChannel('amap_native_plugin/map_view_1');
+    final viewCalls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(viewChannel, (methodCall) async {
+          viewCalls.add(methodCall);
+          return null;
+        });
+
+    await viewChannel.invokeMethod<void>('updatePins', <String, Object?>{
+      'pins': const [
+        <String, Object?>{
+          'position': <String, Object?>{
+            'latitude': 31.2304,
+            'longitude': 121.4737,
+          },
+          'title': 'Shanghai',
+          'snippet': 'Center pin',
+          'draggable': true,
+        },
+      ],
+    });
+
+    expect(viewCalls, hasLength(1));
+    expect(viewCalls.single.method, 'updatePins');
+    expect(viewCalls.single.arguments, isA<Map>());
+    expect(
+      viewCalls.single.arguments,
+      containsPair('pins', const [
+        <String, Object?>{
+          'position': <String, Object?>{
+            'latitude': 31.2304,
+            'longitude': 121.4737,
+          },
+          'title': 'Shanghai',
+          'snippet': 'Center pin',
+          'draggable': true,
+        },
+      ]),
+    );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(viewChannel, null);
+  });
 }

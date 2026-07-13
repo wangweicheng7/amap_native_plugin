@@ -9,8 +9,9 @@ not implement geofence enter or exit business events.
 
 - Display native AMap map views in Flutter.
 - Configure initial map center and zoom.
-- Draw one or more circle geofences by center point and radius.
+- Draw one or more circle geofences by center point and radius, with a dashed border.
 - Update circle geofence radius and center at runtime.
+- Place native map pins by coordinate and react to map tap events.
 - Listen for map camera movement and idle events.
 - Overlay custom Flutter center pins for map-center selection flows.
 - Optionally show the user's location after the host app handles permissions.
@@ -85,6 +86,27 @@ AmapMapView(
   circleGeofences: [
     AmapCircleGeofence(center: center, radiusMeters: radiusMeters),
   ],
+);
+```
+
+## Map Pin Placement
+
+Use `pins` to show native map markers, and `onMapTap` to place or replace a pin
+from user interaction.
+
+```dart
+AmapMapView(
+  initialCenter: center,
+  initialZoom: 14,
+  pins: const [
+    AmapMapPin(
+      position: AmapLatLng(31.2304, 121.4737),
+      title: 'Placed pin',
+    ),
+  ],
+  onMapTap: (position) {
+    // Update your pin state with the tapped coordinate.
+  },
 );
 ```
 

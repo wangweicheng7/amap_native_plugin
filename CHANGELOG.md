@@ -3,5 +3,6 @@
 - Initial release.
 - Add Android and iOS native AMap platform views.
 - Add SDK initialization for Android and iOS API keys.
-- Add circle geofence drawing with customizable radius, stroke, and fill.
+- Add circle geofence drawing with customizable radius, dashed stroke, and fill.
 - Add dynamic geofence updates, map camera callbacks, and customizable center pins.
+- Add native map pin placement and map tap callbacks.

@@ -62,7 +62,51 @@ class AmapCircleGeofence {
   }
 }
 
+class AmapMapPin {
+  const AmapMapPin({
+    required this.position,
+    this.title,
+    this.snippet,
+    this.draggable = false,
+  });
+
+  final AmapLatLng position;
+  final String? title;
+  final String? snippet;
+  final bool draggable;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'position': position.toJson(),
+      'title': title,
+      'snippet': snippet,
+      'draggable': draggable,
+    };
+  }
+}
+
+class AmapMapPolyline {
+  const AmapMapPolyline({
+    required this.points,
+    this.color = const Color(0xFFFF5B00),
+    this.width = 6,
+  });
+
+  final List<AmapLatLng> points;
+  final Color color;
+  final double width;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'points': points.map((point) => point.toJson()).toList(growable: false),
+      'color': color.toARGB32(),
+      'width': width,
+    };
+  }
+}
+
 typedef AmapCameraChangedCallback = void Function(AmapLatLng center);
+typedef AmapMapTapCallback = void Function(AmapLatLng position);
 
 class AmapMapView extends StatefulWidget {
   const AmapMapView({
@@ -72,11 +116,14 @@ class AmapMapView extends StatefulWidget {
     this.initialCenter,
     this.initialZoom,
     this.circleGeofences = const <AmapCircleGeofence>[],
+    this.pins = const <AmapMapPin>[],
+    this.polylines = const <AmapMapPolyline>[],
     this.showMyLocation = false,
     this.centerPin,
     this.movingCenterPin,
     this.onCameraMove,
     this.onCameraIdle,
+    this.onMapTap,
     this.gestureRecognizers,
     this.onMapCreated,
   });
@@ -86,11 +133,14 @@ class AmapMapView extends StatefulWidget {
   final AmapLatLng? initialCenter;
   final double? initialZoom;
   final List<AmapCircleGeofence> circleGeofences;
+  final List<AmapMapPin> pins;
+  final List<AmapMapPolyline> polylines;
   final bool showMyLocation;
   final Widget? centerPin;
   final Widget? movingCenterPin;
   final AmapCameraChangedCallback? onCameraMove;
   final AmapCameraChangedCallback? onCameraIdle;
+  final AmapMapTapCallback? onMapTap;
   final Set<Factory<OneSequenceGestureRecognizer>>? gestureRecognizers;
   final PlatformViewCreatedCallback? onMapCreated;
 
@@ -109,6 +159,8 @@ class _AmapMapViewState extends State<AmapMapView> {
       'initialCenter': widget.initialCenter?.toJson(),
       'initialZoom': widget.initialZoom,
       'circleGeofences': _circleGeofencesJson,
+      'pins': _pinsJson,
+      'polylines': _polylinesJson,
       'showMyLocation': widget.showMyLocation,
     };
   }
@@ -119,17 +171,41 @@ class _AmapMapViewState extends State<AmapMapView> {
         .toList(growable: false);
   }
 
+  List<Map<String, Object?>> get _pinsJson {
+    return widget.pins.map((pin) => pin.toJson()).toList(growable: false);
+  }
+
+  List<Map<String, Object?>> get _polylinesJson {
+    return widget.polylines
+        .map((polyline) => polyline.toJson())
+        .toList(growable: false);
+  }
+
   @override
   void didUpdateWidget(covariant AmapMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_viewChannel == null ||
-        listEquals(oldWidget.circleGeofences, widget.circleGeofences)) {
+    if (_viewChannel == null) {
       return;
     }
 
-    _viewChannel?.invokeMethod<void>('updateCircleGeofences', <String, Object?>{
-      'circleGeofences': _circleGeofencesJson,
-    });
+    if (!listEquals(oldWidget.circleGeofences, widget.circleGeofences)) {
+      _viewChannel?.invokeMethod<void>(
+        'updateCircleGeofences',
+        <String, Object?>{'circleGeofences': _circleGeofencesJson},
+      );
+    }
+
+    if (!listEquals(oldWidget.pins, widget.pins)) {
+      _viewChannel?.invokeMethod<void>('updatePins', <String, Object?>{
+        'pins': _pinsJson,
+      });
+    }
+
+    if (!listEquals(oldWidget.polylines, widget.polylines)) {
+      _viewChannel?.invokeMethod<void>('updatePolylines', <String, Object?>{
+        'polylines': _polylinesJson,
+      });
+    }
   }
 
   @override
@@ -183,6 +259,12 @@ class _AmapMapViewState extends State<AmapMapView> {
     _viewChannel?.invokeMethod<void>('updateCircleGeofences', <String, Object?>{
       'circleGeofences': _circleGeofencesJson,
     });
+    _viewChannel?.invokeMethod<void>('updatePins', <String, Object?>{
+      'pins': _pinsJson,
+    });
+    _viewChannel?.invokeMethod<void>('updatePolylines', <String, Object?>{
+      'polylines': _polylinesJson,
+    });
     widget.onMapCreated?.call(id);
   }
 
@@ -209,6 +291,13 @@ class _AmapMapViewState extends State<AmapMapView> {
           _isCameraMoving = false;
         });
         widget.onCameraIdle?.call(center);
+        break;
+      case 'mapTap':
+        final position = _latLngFromArguments(call.arguments);
+        if (position == null) {
+          return;
+        }
+        widget.onMapTap?.call(position);
         break;
     }
   }
