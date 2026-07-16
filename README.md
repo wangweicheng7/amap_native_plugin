@@ -26,7 +26,7 @@ Add the package to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  amap_native_plugin: ^0.1.0
+  amap_native_plugin: ^0.1.1
 ```
 
 ## Initialization
