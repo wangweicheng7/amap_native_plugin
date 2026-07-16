@@ -3,6 +3,8 @@
 - Add native map pins and map tap callbacks on Android and iOS.
 - Add native polyline drawing with customizable color and width.
 - Add runtime updates for pins, polylines, and circle geofences.
+- Add optional polyline moving pins that follow dynamically updated route endpoints.
+- Add circle containment checks and a three-geofence random-pin example.
 - Add dashed circle geofence strokes and expand the example app.
 
 ## 0.0.1

@@ -2,6 +2,7 @@ import 'package:amap_native_plugin/amap_native_plugin.dart';
 import 'package:amap_native_plugin/amap_native_plugin_method_channel.dart';
 import 'package:amap_native_plugin/amap_native_plugin_platform_interface.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
@@ -52,12 +53,27 @@ void main() {
     });
   });
 
+  test('circle geofence detects inside and outside coordinates', () {
+    const geofence = AmapCircleGeofence(
+      center: AmapLatLng(31.2304, 121.4737),
+      radiusMeters: 500,
+    );
+
+    expect(geofence.contains(const AmapLatLng(31.2310, 121.4742)), isTrue);
+    expect(geofence.contains(const AmapLatLng(31.2404, 121.4737)), isFalse);
+  });
+
   test('map pin serializes placement parameters', () {
     const pin = AmapMapPin(
       position: AmapLatLng(31.2304, 121.4737),
       title: 'Shanghai',
       snippet: 'Center pin',
       draggable: true,
+      label: 'Custom label',
+      pinColor: Color(0xFF7C3AED),
+      labelTextColor: Color(0xFFFFFFFF),
+      labelBackgroundColor: Color(0xE67C3AED),
+      child: SizedBox(width: 48, height: 48),
     );
 
     expect(pin.toJson(), <String, Object?>{
@@ -65,6 +81,13 @@ void main() {
       'title': 'Shanghai',
       'snippet': 'Center pin',
       'draggable': true,
+      'label': 'Custom label',
+      'pinColor': 0xFF7C3AED,
+      'labelTextColor': 0xFFFFFFFF,
+      'labelBackgroundColor': 0xE67C3AED,
+      'imageBytes': null,
+      'imageWidth': null,
+      'imageHeight': null,
     });
   });
 
@@ -86,5 +109,104 @@ void main() {
       'color': 0xFFFF5B00,
       'width': 6,
     });
+  });
+
+  test('polyline accepts a pin that follows its last point', () {
+    const movingPin = AmapMapPin(
+      position: AmapLatLng(39.909187, 116.397451),
+      title: 'Moving position',
+    );
+    const polyline = AmapMapPolyline(
+      points: [
+        AmapLatLng(39.909187, 116.397451),
+        AmapLatLng(39.9102, 116.3991),
+      ],
+      movingPin: movingPin,
+    );
+
+    expect(polyline.movingPin, same(movingPin));
+    expect(
+      () => const StandardMessageCodec().encodeMessage(polyline.toJson()),
+      returnsNormally,
+    );
+  });
+
+  test('map pin widget is not sent through the platform codec', () {
+    const child = SizedBox(width: 48, height: 48);
+    const pin = AmapMapPin(
+      position: AmapLatLng(31.2304, 121.4737),
+      child: child,
+    );
+
+    expect(pin.child, same(child));
+    expect(pin.toJson(), isNot(contains('child')));
+    expect(
+      () => const StandardMessageCodec().encodeMessage(pin.toJson()),
+      returnsNormally,
+    );
+  });
+
+  testWidgets('map pin widget can be rendered for the native marker', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 200,
+          height: 200,
+          child: AmapMapView(
+            pins: <AmapMapPin>[
+              AmapMapPin(
+                position: AmapLatLng(31.2304, 121.4737),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: ColoredBox(color: Colors.orange),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('moving polyline pin can render a Flutter widget', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 200,
+          height: 200,
+          child: AmapMapView(
+            polylines: <AmapMapPolyline>[
+              AmapMapPolyline(
+                points: <AmapLatLng>[
+                  AmapLatLng(31.2304, 121.4737),
+                  AmapLatLng(31.2310, 121.4742),
+                ],
+                movingPin: AmapMapPin(
+                  position: AmapLatLng(31.2304, 121.4737),
+                  child: SizedBox(
+                    key: ValueKey<String>('moving-track-pin'),
+                    width: 48,
+                    height: 48,
+                    child: ColoredBox(color: Colors.green),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('moving-track-pin')), findsOne);
+    expect(tester.takeException(), isNull);
   });
 }

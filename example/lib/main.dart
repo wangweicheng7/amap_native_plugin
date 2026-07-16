@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:amap_native_plugin/amap_native_plugin.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -67,6 +70,16 @@ class ExamplesHomePage extends StatelessWidget {
             title: '围栏大头针示例',
             subtitle: '一个地理围栏，围栏内外各放置大头针。',
             builder: (_) => const GeofencePinDemoPage(),
+          ),
+          ExampleListTile(
+            title: '动态轨迹与移动大头针',
+            subtitle: '逐点绘制轨迹，大头针始终跟随轨迹末端移动。',
+            builder: (_) => const DynamicTrackPage(),
+          ),
+          ExampleListTile(
+            title: '三围栏随机大头针判断',
+            subtitle: '绘制三个围栏，随机放置大头针并判断是否位于围栏内。',
+            builder: (_) => const RandomPinGeofencePage(),
           ),
         ],
       ),
@@ -356,9 +369,14 @@ class _PinPlacementPageState extends State<PinPlacementPage> {
   }
 }
 
-class GeofencePinDemoPage extends StatelessWidget {
+class GeofencePinDemoPage extends StatefulWidget {
   const GeofencePinDemoPage({super.key});
 
+  @override
+  State<GeofencePinDemoPage> createState() => _GeofencePinDemoPageState();
+}
+
+class _GeofencePinDemoPageState extends State<GeofencePinDemoPage> {
   static const _center = AmapLatLng(30.2741, 120.1551);
   static const _insidePin = AmapMapPin(
     position: AmapLatLng(30.2747, 120.1558),
@@ -369,12 +387,42 @@ class GeofencePinDemoPage extends StatelessWidget {
     position: AmapLatLng(30.286, 120.165),
     title: '围栏外 1',
     snippet: '位于地理围栏外部',
+    label: '自定义提示文字',
+    pinColor: Color(0xFF7C3AED),
+    labelTextColor: Color(0xFFFFFFFF),
+    labelBackgroundColor: Color(0xE67C3AED),
   );
   static const _outsidePinTwo = AmapMapPin(
     position: AmapLatLng(30.264, 120.142),
     title: '围栏外 2',
     snippet: '位于地理围栏外部',
   );
+  static const _imagePin = AmapMapPin(
+    position: AmapLatLng(30.269, 120.169),
+    title: '自定义 Widget 大头针',
+    snippet: 'Flutter Widget 会转换为图片并显示在原生地图上',
+    child: SizedBox(
+      width: 54,
+      height: 54,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Color(0xFF0F766E),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x4D000000),
+              blurRadius: 6,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Icon(Icons.pets, color: Colors.white, size: 30),
+      ),
+    ),
+  );
+  static const _focusZoom = 15.0;
+
+  AmapMapController? _mapController;
 
   @override
   Widget build(BuildContext context) {
@@ -386,6 +434,11 @@ class GeofencePinDemoPage extends StatelessWidget {
             child: AmapMapView(
               initialCenter: _center,
               initialZoom: 13,
+              onMapCreated: (mapId) {
+                setState(() {
+                  _mapController = AmapMapController(mapId);
+                });
+              },
               circleGeofences: const [
                 AmapCircleGeofence(
                   center: _center,
@@ -395,19 +448,262 @@ class GeofencePinDemoPage extends StatelessWidget {
                   strokeWidth: 4,
                 ),
               ],
-              pins: const [_insidePin, _outsidePinOne, _outsidePinTwo],
+              pins: const [
+                _insidePin,
+                _outsidePinOne,
+                _outsidePinTwo,
+                _imagePin,
+              ],
             ),
           ),
           SafeArea(
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Row(
-                children: const [
-                  Expanded(child: Text('蓝色圆形为地理围栏，围栏内放 1 颗，围栏外放 2 颗大头针。')),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('蓝色圆形为地理围栏；紫色针体和 Flutter Widget 展示两种自定义大头针样式。'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _mapController == null
+                              ? null
+                              : () => _mapController!.moveCamera(
+                                  center: _insidePin.position,
+                                  zoom: _focusZoom,
+                                ),
+                          icon: const Icon(Icons.my_location),
+                          label: const Text('定位按钮'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _mapController == null
+                              ? null
+                              : () => _mapController!.fitAllOverlays(),
+                          icon: const Icon(Icons.zoom_out_map),
+                          label: const Text('定位按钮 2'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DynamicTrackPage extends StatefulWidget {
+  const DynamicTrackPage({super.key});
+
+  @override
+  State<DynamicTrackPage> createState() => _DynamicTrackPageState();
+}
+
+class RandomPinGeofencePage extends StatefulWidget {
+  const RandomPinGeofencePage({super.key});
+
+  @override
+  State<RandomPinGeofencePage> createState() => _RandomPinGeofencePageState();
+}
+
+class _RandomPinGeofencePageState extends State<RandomPinGeofencePage> {
+  static const _mapCenter = AmapLatLng(30.2755, 120.1600);
+  static const _geofences = <_DemoGeofence>[
+    _DemoGeofence(
+      name: '西湖围栏',
+      center: AmapLatLng(30.2741, 120.1551),
+      radiusMeters: 700,
+      strokeColor: Color(0xFF2563EB),
+      fillColor: Color(0x332563EB),
+    ),
+    _DemoGeofence(
+      name: '北区围栏',
+      center: AmapLatLng(30.2830, 120.1640),
+      radiusMeters: 600,
+      strokeColor: Color(0xFF16A34A),
+      fillColor: Color(0x3316A34A),
+    ),
+    _DemoGeofence(
+      name: '南区围栏',
+      center: AmapLatLng(30.2670, 120.1690),
+      radiusMeters: 550,
+      strokeColor: Color(0xFFF97316),
+      fillColor: Color(0x33F97316),
+    ),
+  ];
+
+  late final AmapLatLng _randomPin;
+  late final List<_DemoGeofence> _containingGeofences;
+
+  @override
+  void initState() {
+    super.initState();
+    final random = math.Random();
+    _randomPin = AmapLatLng(
+      30.2600 + random.nextDouble() * 0.031,
+      120.1430 + random.nextDouble() * 0.034,
+    );
+    _containingGeofences = _geofences
+        .where((geofence) => geofence.contains(_randomPin))
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isInside = _containingGeofences.isNotEmpty;
+    final resultText = isInside
+        ? '判断结果：位于 ${_containingGeofences.map((item) => item.name).join('、')} 内'
+        : '判断结果：不在任何围栏内';
+    return Scaffold(
+      appBar: AppBar(title: const Text('三围栏随机大头针判断')),
+      body: Column(
+        children: [
+          Expanded(
+            child: AmapMapView(
+              initialCenter: _mapCenter,
+              initialZoom: 13.8,
+              circleGeofences: _geofences
+                  .map((geofence) => geofence.overlay)
+                  .toList(growable: false),
+              pins: [
+                AmapMapPin(
+                  position: _randomPin,
+                  title: '随机大头针',
+                  snippet: resultText,
+                  label: isInside ? '围栏内' : '围栏外',
+                  pinColor: isInside
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFFDC2626),
+                  labelBackgroundColor: isInside
+                      ? const Color(0xE616A34A)
+                      : const Color(0xE6DC2626),
+                ),
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    resultText,
+                    key: const ValueKey<String>('geofence-result'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '随机坐标：${_randomPin.latitude.toStringAsFixed(6)}, '
+                    '${_randomPin.longitude.toStringAsFixed(6)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DemoGeofence {
+  const _DemoGeofence({
+    required this.name,
+    required this.center,
+    required this.radiusMeters,
+    required this.strokeColor,
+    required this.fillColor,
+  });
+
+  final String name;
+  final AmapLatLng center;
+  final double radiusMeters;
+  final Color strokeColor;
+  final Color fillColor;
+
+  AmapCircleGeofence get overlay {
+    return AmapCircleGeofence(
+      center: center,
+      radiusMeters: radiusMeters,
+      strokeColor: strokeColor,
+      fillColor: fillColor,
+      strokeWidth: 3,
+    );
+  }
+
+  bool contains(AmapLatLng point) {
+    return overlay.contains(point);
+  }
+}
+
+class _DynamicTrackPageState extends State<DynamicTrackPage> {
+  static const _track = <AmapLatLng>[
+    AmapLatLng(30.2741, 120.1551),
+    AmapLatLng(30.2750, 120.1560),
+    AmapLatLng(30.2758, 120.1572),
+    AmapLatLng(30.2766, 120.1580),
+    AmapLatLng(30.2774, 120.1570),
+    AmapLatLng(30.2782, 120.1558),
+    AmapLatLng(30.2790, 120.1568),
+  ];
+  static const _movingPin = AmapMapPin(
+    position: AmapLatLng(30.2741, 120.1551),
+    title: '当前轨迹位置',
+    label: '移动中',
+    pinColor: Color(0xFF16A34A),
+    labelBackgroundColor: Color(0xE616A34A),
+  );
+
+  Timer? _timer;
+  int _visiblePointCount = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _visiblePointCount = _visiblePointCount == _track.length
+            ? 1
+            : _visiblePointCount + 1;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visiblePoints = _track.sublist(0, _visiblePointCount);
+    return Scaffold(
+      appBar: AppBar(title: const Text('动态轨迹与移动大头针')),
+      body: AmapMapView(
+        initialCenter: _track.first,
+        initialZoom: 16,
+        polylines: <AmapMapPolyline>[
+          AmapMapPolyline(
+            points: visiblePoints,
+            color: const Color(0xFFFF5B00),
+            width: 6,
+            movingPin: _movingPin,
           ),
         ],
       ),

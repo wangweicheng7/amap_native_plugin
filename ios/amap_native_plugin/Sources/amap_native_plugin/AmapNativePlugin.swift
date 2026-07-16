@@ -63,6 +63,7 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
   private var borderOverlays: [MAPolyline] = []
   private var borderStyles: [ObjectIdentifier: CircleGeofenceStyle] = [:]
   private var pinAnnotations: [MAPointAnnotation] = []
+  private var pinStyles: [ObjectIdentifier: CustomPinStyle] = [:]
   private var routePolylines: [MAPolyline] = []
   private var routePolylineStyles: [ObjectIdentifier: PolylineStyle] = [:]
 
@@ -93,11 +94,61 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
         let args = call.arguments as? [String: Any]
         self?.updatePolylines(args?["polylines"] as? [[String: Any]])
         result(nil)
+      case "updateMovingPins":
+        let args = call.arguments as? [String: Any]
+        self?.updateMovingPins(args?["updates"] as? [[String: Any]])
+        result(nil)
+      case "moveCamera":
+        let args = call.arguments as? [String: Any]
+        guard
+          let center = args?["center"] as? [String: Any],
+          let latitude = center["latitude"] as? Double,
+          let longitude = center["longitude"] as? Double,
+          let zoom = args?["zoom"] as? Double
+        else {
+          result(FlutterError(code: "invalid_arguments", message: "center and zoom are required", details: nil))
+          return
+        }
+        self?.mapView.setCenter(
+          CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+          animated: true
+        )
+        self?.mapView.setZoomLevel(CGFloat(zoom), animated: true)
+        result(nil)
+      case "fitAllOverlays":
+        let args = call.arguments as? [String: Any]
+        self?.fitAllOverlays(padding: CGFloat((args?["padding"] as? Double) ?? 48))
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
     }
     applyCreationParams(args as? [String: Any])
+  }
+
+  private func fitAllOverlays(padding: CGFloat) {
+    var visibleRect = MAMapRectNull
+
+    for circle in circleOverlays {
+      visibleRect = MAMapRectUnion(visibleRect, circle.boundingMapRect)
+    }
+    for polyline in routePolylines {
+      visibleRect = MAMapRectUnion(visibleRect, polyline.boundingMapRect)
+    }
+    for annotation in pinAnnotations {
+      let point = MAMapPointForCoordinate(annotation.coordinate)
+      let pointRect = MAMapRectMake(point.x, point.y, 1, 1)
+      visibleRect = MAMapRectUnion(visibleRect, pointRect)
+    }
+
+    guard !MAMapRectIsNull(visibleRect) else {
+      return
+    }
+    mapView.setVisibleMapRect(
+      visibleRect,
+      edgePadding: UIEdgeInsets(top: padding, left: padding, bottom: padding, right: padding),
+      animated: true
+    )
   }
 
   deinit {
@@ -142,6 +193,24 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
   private func updatePolylines(_ polylines: [[String: Any]]?) {
     removeRoutePolylines()
     drawPolylines(polylines)
+  }
+
+  private func updateMovingPins(_ updates: [[String: Any]]?) {
+    updates?.forEach { update in
+      guard
+        let index = update["index"] as? Int,
+        pinAnnotations.indices.contains(index),
+        let position = update["position"] as? [String: Any],
+        let latitude = position["latitude"] as? Double,
+        let longitude = position["longitude"] as? Double
+      else {
+        return
+      }
+      pinAnnotations[index].coordinate = CLLocationCoordinate2D(
+        latitude: latitude,
+        longitude: longitude
+      )
+    }
   }
 
   private func drawCircleGeofences(_ geofences: [[String: Any]]?) {
@@ -196,9 +265,33 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
       annotation.coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
       annotation.title = pin["title"] as? String
       annotation.subtitle = pin["snippet"] as? String
+      let label = (pin["label"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      let byteImage = (pin["imageBytes"] as? FlutterStandardTypedData)
+        .flatMap { UIImage(data: $0.data) }
+      let assetImage = byteImage ?? (pin["imageAsset"] as? String).flatMap(loadFlutterAssetImage)
+      if label != nil || assetImage != nil {
+        let imageWidth = CGFloat((pin["imageWidth"] as? Double) ?? 44)
+        let imageHeight = CGFloat((pin["imageHeight"] as? Double) ?? 44)
+        pinStyles[ObjectIdentifier(annotation)] = CustomPinStyle(
+          label: label,
+          image: assetImage,
+          pinSize: assetImage == nil ? CGSize(width: 32, height: 42) : CGSize(width: imageWidth, height: imageHeight),
+          pinColor: uiColor(from: pin["pinColor"], fallback: UIColor(red: 0.97, green: 0.45, blue: 0.09, alpha: 1)),
+          textColor: uiColor(from: pin["labelTextColor"], fallback: .white),
+          backgroundColor: uiColor(from: pin["labelBackgroundColor"], fallback: UIColor(red: 0.18, green: 0.22, blue: 0.28, alpha: 0.9))
+        )
+      }
       pinAnnotations.append(annotation)
       mapView.addAnnotation(annotation)
     }
+  }
+
+  private func loadFlutterAssetImage(_ assetName: String) -> UIImage? {
+    let assetKey = FlutterDartProject.lookupKey(forAsset: assetName)
+    guard let path = Bundle.main.path(forResource: assetKey, ofType: nil) else {
+      return nil
+    }
+    return UIImage(contentsOfFile: path)
   }
 
   private func drawPolylines(_ polylines: [[String: Any]]?) {
@@ -274,6 +367,24 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
       return nil
     }
 
+    if let style = pinStyles[ObjectIdentifier(annotation as AnyObject)] {
+      let reuseIdentifier = "amap_native_plugin_labeled_pin"
+      var view = mapView.dequeueReusableAnnotationView(withIdentifier: reuseIdentifier)
+      if view == nil {
+        view = MAAnnotationView(annotation: annotation, reuseIdentifier: reuseIdentifier)
+      } else {
+        view?.annotation = annotation
+      }
+      let image = customPinImage(style)
+      view?.image = image
+      view?.centerOffset = CGPoint(
+        x: image.size.width / 2 - style.pinSize.width / 2,
+        y: -image.size.height / 2
+      )
+      view?.canShowCallout = true
+      return view
+    }
+
     let reuseIdentifier = "amap_native_plugin_pin"
     var view = mapView.dequeueReusableAnnotationView(withIdentifier: reuseIdentifier) as? MAPinAnnotationView
     if view == nil {
@@ -285,6 +396,60 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
     view?.animatesDrop = true
     view?.canShowCallout = true
     return view
+  }
+
+  private func customPinImage(_ style: CustomPinStyle) -> UIImage {
+    let pinWidth = style.pinSize.width
+    let pinHeight = style.pinSize.height
+    let gap: CGFloat = 6
+    let labelHeight: CGFloat = 32
+    let horizontalPadding: CGFloat = 10
+    let font = UIFont.boldSystemFont(ofSize: 14)
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: style.textColor
+    ]
+    let textSize = style.label.map { ($0 as NSString).size(withAttributes: attributes) } ?? .zero
+    let labelWidth = style.label == nil ? 0 : ceil(textSize.width + horizontalPadding * 2)
+    let size = CGSize(
+      width: pinWidth + (style.label == nil ? 0 : gap + labelWidth),
+      height: max(pinHeight, labelHeight)
+    )
+
+    return UIGraphicsImageRenderer(size: size).image { _ in
+      if let pinImage = style.image {
+        pinImage.draw(in: CGRect(origin: .zero, size: style.pinSize))
+      } else {
+        style.pinColor.setFill()
+        let triangle = UIBezierPath()
+        triangle.move(to: CGPoint(x: 8, y: 21))
+        triangle.addLine(to: CGPoint(x: pinWidth / 2, y: pinHeight))
+        triangle.addLine(to: CGPoint(x: 24, y: 21))
+        triangle.close()
+        triangle.fill()
+        UIBezierPath(ovalIn: CGRect(x: 4, y: 2, width: 24, height: 24)).fill()
+        UIColor.white.setFill()
+        UIBezierPath(ovalIn: CGRect(x: 12, y: 10, width: 8, height: 8)).fill()
+      }
+
+      if let label = style.label {
+        let labelRect = CGRect(
+          x: pinWidth + gap,
+          y: (size.height - labelHeight) / 2,
+          width: labelWidth,
+          height: labelHeight
+        )
+        style.backgroundColor.setFill()
+        UIBezierPath(roundedRect: labelRect, cornerRadius: 8).fill()
+        let textRect = CGRect(
+          x: labelRect.minX + horizontalPadding,
+          y: labelRect.midY - textSize.height / 2,
+          width: textSize.width,
+          height: textSize.height
+        )
+        (label as NSString).draw(in: textRect, withAttributes: attributes)
+      }
+    }
   }
 
   private func removeAllCircleGeofenceOverlays() {
@@ -305,6 +470,7 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
       mapView.removeAnnotations(pinAnnotations)
       pinAnnotations.removeAll()
     }
+    pinStyles.removeAll()
   }
 
   private func removeRoutePolylines() {
@@ -449,4 +615,13 @@ private struct CircleGeofenceStyle {
 private struct PolylineStyle {
   let color: UIColor
   let width: CGFloat
+}
+
+private struct CustomPinStyle {
+  let label: String?
+  let image: UIImage?
+  let pinSize: CGSize
+  let pinColor: UIColor
+  let textColor: UIColor
+  let backgroundColor: UIColor
 }

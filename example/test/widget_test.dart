@@ -1,27 +1,26 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:amap_native_plugin/amap_native_plugin.dart';
+import 'package:amap_native_plugin_example/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:amap_native_plugin_example/main.dart';
-
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('random pin page draws three geofences and one pin', (
+    tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is Text && widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
+    await tester.scrollUntilVisible(
+      find.text('三围栏随机大头针判断'),
+      200,
+      scrollable: find.byType(Scrollable).first,
     );
+    await tester.tap(find.text('三围栏随机大头针判断'));
+    await tester.pumpAndSettle();
+
+    final map = tester.widget<AmapMapView>(find.byType(AmapMapView));
+    expect(map.circleGeofences, hasLength(3));
+    expect(map.pins, hasLength(1));
+    expect(find.byKey(const ValueKey<String>('geofence-result')), findsOne);
+    expect(find.textContaining('判断结果：'), findsOne);
   });
 }

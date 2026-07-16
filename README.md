@@ -9,9 +9,12 @@ implement geofence enter or exit business events.
 
 - Display native AMap map views in Flutter.
 - Configure initial map center and zoom.
+- Move the camera at runtime or fit all pins, geofences, and polylines on screen.
 - Draw one or more circle geofences by center point and radius, with a dashed border.
+- Test whether a coordinate is inside a circle with `AmapCircleGeofence.contains`.
 - Update circle geofence radius and center at runtime.
 - Place native map pins by coordinate and react to map tap events.
+- Style a map pin, pass a Flutter widget as its marker, and show persistent hint text beside it.
 - Draw and update native polylines with custom colors and widths.
 - Listen for map camera movement and idle events.
 - Overlay custom Flutter center pins for map-center selection flows.
@@ -49,6 +52,22 @@ const AmapMapView(
   initialCenter: AmapLatLng(31.2304, 121.4737),
   initialZoom: 12,
 );
+```
+
+Use the platform view ID to control the camera after the map is created:
+
+```dart
+AmapMapController? controller;
+
+AmapMapView(
+  onMapCreated: (mapId) => controller = AmapMapController(mapId),
+);
+
+await controller?.moveCamera(
+  center: const AmapLatLng(31.2304, 121.4737),
+  zoom: 15,
+);
+await controller?.fitAllOverlays(padding: 48);
 ```
 
 ## Circle Geofence
@@ -103,6 +122,21 @@ AmapMapView(
     AmapMapPin(
       position: AmapLatLng(31.2304, 121.4737),
       title: 'Placed pin',
+      label: 'Persistent hint',
+      pinColor: Color(0xFF7C3AED),
+      labelTextColor: Colors.white,
+      labelBackgroundColor: Color(0xE67C3AED),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Color(0xFF0F766E),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.pets, color: Colors.white),
+        ),
+      ),
     ),
   ],
   onMapTap: (position) {
@@ -110,6 +144,10 @@ AmapMapView(
   },
 );
 ```
+
+The pin `child` is rendered to a transparent PNG before it is sent to the
+native map. Give it an explicit size; when the widget changes, provide an
+updated `AmapMapPin` so the marker is rendered again.
 
 ## Polyline Drawing
 
@@ -132,6 +170,24 @@ AmapMapView(
     ),
   ],
 );
+```
+
+Set `movingPin` to keep an existing native marker at the last point while the
+route grows. The pin's `position` is used before the route has any points.
+Custom labels and Flutter `child` markers use the same `AmapMapPin` rendering
+pipeline as normal map pins.
+
+```dart
+AmapMapPolyline(
+  points: visibleTrackPoints,
+  color: const Color(0xFFFF5B00),
+  width: 6,
+  movingPin: const AmapMapPin(
+    position: AmapLatLng(31.2304, 121.4737),
+    title: 'Current track position',
+    label: 'Moving',
+  ),
+)
 ```
 
 ## Platform Notes

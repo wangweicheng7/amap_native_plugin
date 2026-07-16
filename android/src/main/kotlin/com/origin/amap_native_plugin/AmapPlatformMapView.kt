@@ -1,24 +1,35 @@
 package com.origin.amap_native_plugin
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.os.Bundle
 import android.view.View
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapView
 import com.amap.api.maps.model.CameraPosition
 import com.amap.api.maps.model.CircleOptions
+import com.amap.api.maps.model.BitmapDescriptorFactory
 import com.amap.api.maps.model.LatLng
+import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.maps.model.PolylineOptions
 import com.amap.api.maps.model.Polyline
 import io.flutter.plugin.common.BinaryMessenger
+import io.flutter.FlutterInjector
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.platform.PlatformView
+import kotlin.math.ceil
+import kotlin.math.max
 
 class AmapPlatformMapView(
     context: Context,
@@ -84,8 +95,63 @@ class AmapPlatformMapView(
                 updatePolylines(args?.get("polylines") as? List<*>)
                 result.success(null)
             }
+            "updateMovingPins" -> {
+                val args = call.arguments as? Map<*, *>
+                updateMovingPins(args?.get("updates") as? List<*>)
+                result.success(null)
+            }
+            "moveCamera" -> {
+                val args = call.arguments as? Map<*, *>
+                val center = args?.get("center") as? Map<*, *>
+                val latitude = (center?.get("latitude") as? Number)?.toDouble()
+                val longitude = (center?.get("longitude") as? Number)?.toDouble()
+                val zoom = (args?.get("zoom") as? Number)?.toFloat()
+                if (latitude == null || longitude == null || zoom == null) {
+                    result.error("invalid_arguments", "center and zoom are required", null)
+                    return
+                }
+                map.animateCamera(
+                    CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), zoom)
+                )
+                result.success(null)
+            }
+            "fitAllOverlays" -> {
+                val args = call.arguments as? Map<*, *>
+                val paddingDp = (args?.get("padding") as? Number)?.toFloat() ?: 48f
+                fitAllOverlays(paddingDp)
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
+    }
+
+    private fun fitAllOverlays(paddingDp: Float) {
+        val boundsBuilder = LatLngBounds.Builder()
+        var hasPosition = false
+
+        pinMarkers.forEach { marker ->
+            boundsBuilder.include(marker.position)
+            hasPosition = true
+        }
+        circleOverlays.forEach { circle ->
+            val center = circle.center
+            val radius = circle.radius
+            listOf(0.0, 90.0, 180.0, 270.0).forEach { bearing ->
+                boundsBuilder.include(destinationPoint(center, radius, bearing))
+            }
+            hasPosition = true
+        }
+        routePolylines.forEach { polyline ->
+            polyline.points.forEach(boundsBuilder::include)
+            hasPosition = hasPosition || polyline.points.isNotEmpty()
+        }
+
+        if (!hasPosition) {
+            return
+        }
+        val density = mapView.resources.displayMetrics.density
+        val paddingPx = (paddingDp * density).toInt()
+        map.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingPx))
     }
 
     private fun applyCreationParams(params: Map<*, *>?) {
@@ -140,6 +206,17 @@ class AmapPlatformMapView(
         currentParams = updatedParams
     }
 
+    private fun updateMovingPins(updates: List<*>?) {
+        updates?.forEach { item ->
+            val update = item as? Map<*, *> ?: return@forEach
+            val index = (update["index"] as? Number)?.toInt() ?: return@forEach
+            val position = update["position"] as? Map<*, *> ?: return@forEach
+            val latitude = (position["latitude"] as? Number)?.toDouble() ?: return@forEach
+            val longitude = (position["longitude"] as? Number)?.toDouble() ?: return@forEach
+            pinMarkers.getOrNull(index)?.position = LatLng(latitude, longitude)
+        }
+    }
+
     private fun drawCircleGeofences(geofences: List<*>?) {
         geofences?.forEach { item ->
             val geofence = item as? Map<*, *> ?: return@forEach
@@ -177,15 +254,113 @@ class AmapPlatformMapView(
             val position = pin["position"] as? Map<*, *> ?: return@forEach
             val latitude = (position["latitude"] as? Number)?.toDouble() ?: return@forEach
             val longitude = (position["longitude"] as? Number)?.toDouble() ?: return@forEach
-            val marker = map.addMarker(
-                MarkerOptions()
-                    .position(LatLng(latitude, longitude))
-                    .title(pin["title"] as? String)
-                    .snippet(pin["snippet"] as? String)
-                    .draggable(pin["draggable"] as? Boolean ?: false)
-            ) ?: return@forEach
+            val options = MarkerOptions()
+                .position(LatLng(latitude, longitude))
+                .title(pin["title"] as? String)
+                .snippet(pin["snippet"] as? String)
+                .draggable(pin["draggable"] as? Boolean ?: false)
+            val label = (pin["label"] as? String)?.takeIf { it.isNotBlank() }
+            val imageBitmap = (pin["imageBytes"] as? ByteArray)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                ?: (pin["imageAsset"] as? String)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::loadFlutterAssetBitmap)
+            if (label != null || imageBitmap != null) {
+                val customIcon = createCustomPinBitmap(
+                    label = label,
+                    imageBitmap = imageBitmap,
+                    imageWidthDp = (pin["imageWidth"] as? Number)?.toFloat() ?: 44f,
+                    imageHeightDp = (pin["imageHeight"] as? Number)?.toFloat() ?: 44f,
+                    pinColor = (pin["pinColor"] as? Number)?.toInt() ?: 0xFFF97316.toInt(),
+                    textColor = (pin["labelTextColor"] as? Number)?.toInt() ?: Color.WHITE,
+                    backgroundColor = (pin["labelBackgroundColor"] as? Number)?.toInt()
+                        ?: 0xE62D3748.toInt()
+                )
+                options.icon(BitmapDescriptorFactory.fromBitmap(customIcon.bitmap))
+                options.anchor(customIcon.anchorX, 1f)
+            }
+            val marker = map.addMarker(options) ?: return@forEach
             pinMarkers.add(marker)
         }
+    }
+
+    private fun loadFlutterAssetBitmap(assetName: String): Bitmap? {
+        return runCatching {
+            val assetKey = FlutterInjector.instance()
+                .flutterLoader()
+                .getLookupKeyForAsset(assetName)
+            mapView.context.assets.open(assetKey).use(BitmapFactory::decodeStream)
+        }.getOrNull()
+    }
+
+    private fun createCustomPinBitmap(
+        label: String?,
+        imageBitmap: Bitmap?,
+        imageWidthDp: Float,
+        imageHeightDp: Float,
+        pinColor: Int,
+        textColor: Int,
+        backgroundColor: Int
+    ): LabeledPinBitmap {
+        val density = mapView.resources.displayMetrics.density
+        val scaledDensity = mapView.resources.displayMetrics.scaledDensity
+        val pinWidth = (if (imageBitmap == null) 32f else imageWidthDp) * density
+        val pinHeight = (if (imageBitmap == null) 42f else imageHeightDp) * density
+        val gap = 6f * density
+        val labelHeight = 32f * density
+        val horizontalPadding = 10f * density
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = textColor
+            textSize = 14f * scaledDensity
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        val labelWidth = label?.let { textPaint.measureText(it) + horizontalPadding * 2 } ?: 0f
+        val bitmapWidth = ceil(pinWidth + if (label == null) 0f else gap + labelWidth).toInt()
+        val bitmapHeight = ceil(max(pinHeight, labelHeight)).toInt()
+        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        if (imageBitmap != null) {
+            canvas.drawBitmap(
+                imageBitmap,
+                null,
+                RectF(0f, 0f, pinWidth, pinHeight),
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            )
+        } else {
+            val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pinColor }
+            val triangle = Path().apply {
+                moveTo(8f * density, 21f * density)
+                lineTo(pinWidth / 2f, pinHeight)
+                lineTo(24f * density, 21f * density)
+                close()
+            }
+            canvas.drawPath(triangle, pinPaint)
+            canvas.drawCircle(pinWidth / 2f, 14f * density, 12f * density, pinPaint)
+            canvas.drawCircle(
+                pinWidth / 2f,
+                14f * density,
+                4f * density,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+            )
+        }
+
+        if (label != null) {
+            val labelLeft = pinWidth + gap
+            val labelTop = (pinHeight - labelHeight) / 2f
+            val labelRect = RectF(labelLeft, labelTop, labelLeft + labelWidth, labelTop + labelHeight)
+            canvas.drawRoundRect(
+                labelRect,
+                8f * density,
+                8f * density,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { color = backgroundColor }
+            )
+            val baseline = labelRect.centerY() - (textPaint.ascent() + textPaint.descent()) / 2f
+            canvas.drawText(label, labelLeft + horizontalPadding, baseline, textPaint)
+        }
+
+        return LabeledPinBitmap(bitmap, (pinWidth / 2f) / bitmapWidth.toFloat())
     }
 
     private fun drawPolylines(polylines: List<*>?) {
@@ -332,3 +507,8 @@ class AmapPlatformMapView(
         )
     }
 }
+
+private data class LabeledPinBitmap(
+    val bitmap: Bitmap,
+    val anchorX: Float
+)
