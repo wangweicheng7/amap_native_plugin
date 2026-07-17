@@ -31,4 +31,12 @@ abstract class AmapNativePluginPlatform extends PlatformInterface {
   }) {
     throw UnimplementedError('init() has not been implemented.');
   }
+
+  Future<List<Map<Object?, Object?>>> searchPlaces(
+    String keyword, {
+    double? latitude,
+    double? longitude,
+  }) {
+    throw UnimplementedError('searchPlaces() has not been implemented.');
+  }
 }

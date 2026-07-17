@@ -72,7 +72,7 @@ kotlin {
 }
 
 dependencies {
-    implementation("com.amap.api:3dmap:latest.integration")
+    implementation("com.amap.api:3dmap-location-search:11.1.200_loc11.1.200_sea9.7.4")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.mockito:mockito-core:5.0.0")
 }

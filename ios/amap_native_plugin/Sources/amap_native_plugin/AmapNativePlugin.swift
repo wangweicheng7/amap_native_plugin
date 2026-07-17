@@ -1,10 +1,13 @@
 import AMapFoundationKit
+import AMapSearchKit
 import CoreLocation
 import Flutter
 import MAMapKit
 import UIKit
 
 public class AmapNativePlugin: NSObject, FlutterPlugin {
+  private var inputTipsSearches: [UUID: InputTipsSearch] = [:]
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "amap_native_plugin", binaryMessenger: registrar.messenger())
     let instance = AmapNativePlugin()
@@ -22,10 +25,118 @@ public class AmapNativePlugin: NSObject, FlutterPlugin {
       if let iosApiKey = args?["iosApiKey"] as? String, !iosApiKey.isEmpty {
         AMapServices.shared().apiKey = iosApiKey
       }
+      AMapSearchAPI.updatePrivacyShow(.didShow, privacyInfo: .didContain)
+      AMapSearchAPI.updatePrivacyAgree(.didAgree)
       result(nil)
+    case "searchPlaces":
+      let args = call.arguments as? [String: Any]
+      searchPlaces(
+        keyword: args?["keyword"] as? String ?? "",
+        latitude: args?["latitude"] as? Double,
+        longitude: args?["longitude"] as? Double,
+        result: result
+      )
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private func searchPlaces(
+    keyword: String,
+    latitude: Double?,
+    longitude: Double?,
+    result: @escaping FlutterResult
+  ) {
+    let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.count >= 2 else {
+      result([])
+      return
+    }
+
+    let id = UUID()
+    let search = InputTipsSearch(
+      keyword: trimmed,
+      latitude: latitude,
+      longitude: longitude
+    ) { [weak self] response in
+      result(response)
+      self?.inputTipsSearches.removeValue(forKey: id)
+    }
+    inputTipsSearches[id] = search
+    search.start()
+  }
+}
+
+private final class InputTipsSearch: NSObject, AMapSearchDelegate {
+  private let search: AMapSearchAPI?
+  private let keyword: String
+  private let latitude: Double?
+  private let longitude: Double?
+  private let completion: (Any) -> Void
+  private var isCompleted = false
+
+  init(
+    keyword: String,
+    latitude: Double?,
+    longitude: Double?,
+    completion: @escaping (Any) -> Void
+  ) {
+    self.keyword = keyword
+    self.latitude = latitude
+    self.longitude = longitude
+    self.completion = completion
+    search = AMapSearchAPI()
+    super.init()
+    search?.delegate = self
+  }
+
+  func start() {
+    guard let search else {
+      finish(FlutterError(
+        code: "AMAP_SEARCH_UNAVAILABLE",
+        message: "地点搜索服务初始化失败",
+        details: nil
+      ))
+      return
+    }
+    let request = AMapInputTipsSearchRequest()
+    request.keywords = keyword
+    request.cityLimit = false
+    if let latitude, let longitude {
+      request.location = "\(longitude),\(latitude)"
+    }
+    search.aMapInputTipsSearch(request)
+  }
+
+  func onInputTipsSearchDone(
+    _ request: AMapInputTipsSearchRequest!,
+    response: AMapInputTipsSearchResponse!
+  ) {
+    let places = (response?.tips ?? []).compactMap { tip -> [String: Any]? in
+      guard let location = tip.location else { return nil }
+      return [
+        "name": tip.name ?? "",
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "district": tip.district ?? "",
+        "address": tip.address ?? "",
+      ]
+    }
+    finish(places)
+  }
+
+  func aMapSearchRequest(_ request: Any!, didFailWithError error: Error!) {
+    finish(FlutterError(
+      code: "AMAP_SEARCH_FAILED",
+      message: error.localizedDescription,
+      details: nil
+    ))
+  }
+
+  private func finish(_ response: Any) {
+    guard !isCompleted else { return }
+    isCompleted = true
+    completion(response)
   }
 }
 

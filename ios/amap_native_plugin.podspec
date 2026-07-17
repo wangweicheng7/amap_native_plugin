@@ -16,6 +16,7 @@ Flutter plugin for native AMap views with pins, polylines, and circle geofences 
   s.source_files = 'amap_native_plugin/Sources/amap_native_plugin/**/*'
   s.dependency 'Flutter'
   s.dependency 'AMap3DMap'
+  s.dependency 'AMapSearch'
   s.platform = :ios, '13.0'
 
   # Flutter.framework does not contain a i386 slice.

@@ -42,6 +42,36 @@ void main() {
     });
   });
 
+  test('searchPlaces maps native results', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (methodCall) async {
+          calls.add(methodCall);
+          return <Map<String, Object?>>[
+            <String, Object?>{
+              'name': '成都市',
+              'latitude': 30.5728,
+              'longitude': 104.0668,
+              'district': '四川省成都市',
+              'address': '',
+            },
+          ];
+        });
+
+    final places = await platform.searchPlaces(
+      '成都市',
+      latitude: 30.5728,
+      longitude: 104.0668,
+    );
+
+    expect(calls.single.method, 'searchPlaces');
+    expect(calls.single.arguments, <String, Object?>{
+      'keyword': '成都市',
+      'latitude': 30.5728,
+      'longitude': 104.0668,
+    });
+    expect(places.single['name'], '成都市');
+  });
+
   test('pins update is forwarded to the platform view channel', () async {
     const viewChannel = MethodChannel('amap_native_plugin/map_view_1');
     final viewCalls = <MethodCall>[];

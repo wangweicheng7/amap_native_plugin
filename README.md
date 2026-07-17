@@ -19,6 +19,7 @@ implement geofence enter or exit business events.
 - Listen for map camera movement and idle events.
 - Overlay custom Flutter center pins for map-center selection flows.
 - Optionally show the user's location after the host app handles permissions.
+- Search place input tips and coordinates with the platform-specific mobile SDK key.
 
 ## Installation
 
@@ -43,6 +44,20 @@ await AmapNative.init(
 Android also requires the AMap privacy compliance state before SDK use. The
 plugin defaults `androidPrivacyShown` and `androidPrivacyAgreed` to `true`; pass
 explicit values if your consent flow needs tighter control.
+
+## Place Search
+
+Use the same Android or iOS mobile SDK key passed to `AmapNative.init` to fetch
+place suggestions. A separate Web Service key is not required.
+
+```dart
+final places = await AmapNative.searchPlaces(
+  '成都市',
+  location: const AmapLatLng(30.5728, 104.0668),
+);
+final first = places.first;
+print('${first.name}: ${first.latitude},${first.longitude}');
+```
 
 ## Basic Usage
 

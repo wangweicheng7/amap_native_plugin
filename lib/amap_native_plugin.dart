@@ -27,6 +27,47 @@ class AmapNative {
       androidPrivacyAgreed: androidPrivacyAgreed,
     );
   }
+
+  static Future<List<AmapPlace>> searchPlaces(
+    String keyword, {
+    AmapLatLng? location,
+  }) {
+    return AmapNativePluginPlatform.instance
+        .searchPlaces(
+          keyword,
+          latitude: location?.latitude,
+          longitude: location?.longitude,
+        )
+        .then(
+          (places) => places.map(AmapPlace.fromJson).toList(growable: false),
+        );
+  }
+}
+
+class AmapPlace {
+  const AmapPlace({
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.district,
+    required this.address,
+  });
+
+  factory AmapPlace.fromJson(Map<Object?, Object?> json) {
+    return AmapPlace(
+      name: json['name']?.toString() ?? '',
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      district: json['district']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
+    );
+  }
+
+  final String name;
+  final double latitude;
+  final double longitude;
+  final String district;
+  final String address;
 }
 
 class AmapLatLng {

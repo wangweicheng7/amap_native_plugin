@@ -23,4 +23,23 @@ class MethodChannelAmapNativePlugin extends AmapNativePluginPlatform {
       'androidPrivacyAgreed': androidPrivacyAgreed,
     });
   }
+
+  @override
+  Future<List<Map<Object?, Object?>>> searchPlaces(
+    String keyword, {
+    double? latitude,
+    double? longitude,
+  }) async {
+    final results = await methodChannel.invokeListMethod<Object?>(
+      'searchPlaces',
+      <String, Object?>{
+        'keyword': keyword,
+        'latitude': latitude,
+        'longitude': longitude,
+      },
+    );
+    return (results ?? const <Object?>[])
+        .whereType<Map<Object?, Object?>>()
+        .toList(growable: false);
+  }
 }
