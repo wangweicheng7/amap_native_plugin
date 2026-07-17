@@ -1,6 +1,6 @@
 name: amap_native_plugin
 description: Flutter plugin for native AMap views with pins, polylines, and circle geofences on Android and iOS.
-version: 0.1.1
+version: 0.1.2
 homepage: https://pub.dev/packages/amap_native_plugin
 repository: https://github.com/wangweicheng7/amap_native_plugin.git
 topics:
