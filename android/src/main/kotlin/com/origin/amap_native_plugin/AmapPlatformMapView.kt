@@ -74,6 +74,9 @@ class AmapPlatformMapView(
 
     override fun dispose() {
         channel.setMethodCallHandler(null)
+        map.setOnCameraChangeListener(null)
+        map.setOnMapClickListener(null)
+        map.setOnMapLoadedListener(null)
         mapView.onPause()
         mapView.onDestroy()
     }

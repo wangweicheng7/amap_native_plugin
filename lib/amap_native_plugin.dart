@@ -371,12 +371,32 @@ class _AmapMapViewState extends State<AmapMapView> {
   Widget build(BuildContext context) {
     Widget view;
     if (Platform.isAndroid) {
-      view = AndroidView(
+      view = PlatformViewLink(
         viewType: AmapMapView._viewType,
-        creationParams: _creationParams,
-        creationParamsCodec: const StandardMessageCodec(),
-        gestureRecognizers: widget.gestureRecognizers,
-        onPlatformViewCreated: _onPlatformViewCreated,
+        surfaceFactory: (context, controller) {
+          return AndroidViewSurface(
+            controller: controller as AndroidViewController,
+            hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+            gestureRecognizers:
+                widget.gestureRecognizers ??
+                const <Factory<OneSequenceGestureRecognizer>>{},
+          );
+        },
+        onCreatePlatformView: (params) {
+          final controller = PlatformViewsService.initSurfaceAndroidView(
+            id: params.id,
+            viewType: AmapMapView._viewType,
+            layoutDirection: Directionality.of(context),
+            creationParams: _creationParams,
+            creationParamsCodec: const StandardMessageCodec(),
+            onFocus: () => params.onFocusChanged(true),
+          );
+          controller.addOnPlatformViewCreatedListener(
+            params.onPlatformViewCreated,
+          );
+          controller.addOnPlatformViewCreatedListener(_onPlatformViewCreated);
+          return controller;
+        },
       );
     } else if (Platform.isIOS) {
       view = UiKitView(
