@@ -1,6 +1,6 @@
 # amap_native_plugin 同步迁移方案（评审修订版）
 
-更新日期：2026-09-11。状态：已根据用户授权完成技术决策；本轮仅更新方案，尚未实施源码迁移、提交、发布或切换 App 依赖。
+更新日期：2026-09-11。状态：第一轮源码迁移、App 接口回接已提交；尚未完成构建、测试、真机验收和发布。
 
 ## 一、依据及前次审查更正
 
@@ -131,4 +131,4 @@ App 改用主插件与插件实现是两个可回退阶段。回滚通过明确�
 
 ## 七、执行记录
 
-2026-09-11：完成 App 使用方式和关键 Git 历史复核，更新上述决策。迁入第一轮通用实现：TextureMapView、生命周期/销毁、动态定位与可见性、zoomBy、takeSnapshot、pin release 修复、围栏相关实现和 consumer R8 规则；保留主插件 AGP/Kotlin 版本，并将渲染策略接口改为 shouldUseNativeMap。修正 Android hostActive/requestedVisible 状态分离。已通过 git diff --check；Flutter/Dart 命令受 SDK 缓存写权限限制，尚未完成构建、测试或真机验证。App 调用点尚未切换。
+2026-09-11：完成 App 使用方式和关键 Git 历史复核，更新上述决策。迁入第一轮通用实现：TextureMapView、生命周期/销毁、动态定位与可见性、zoomBy、takeSnapshot、pin release 修复、围栏相关实现和 consumer R8 规则；保留主插件 AGP/Kotlin 版本，并将渲染策略接口改为 shouldUseNativeMap。修正 Android hostActive/requestedVisible 状态分离。已通过 git diff --check；Flutter/Dart 命令受 SDK 缓存写权限限制，尚未完成构建、测试或真机验证。App 调用点已切换并提交；仍需完成构建、测试和真机验收。
