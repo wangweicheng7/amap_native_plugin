@@ -46,6 +46,10 @@ void main() {
     expect(initialPlatform, isInstanceOf<MethodChannelAmapNativePlugin>());
   });
 
+  test('Android maps default to TextureMapView rendering', () {
+    expect(const AmapMapView().useTextureView, isTrue);
+  });
+
   test('init delegates to platform implementation', () async {
     final fakePlatform = MockAmapNativePluginPlatform();
     AmapNativePluginPlatform.instance = fakePlatform;
@@ -104,6 +108,7 @@ void main() {
       pinColor: Color(0xFF7C3AED),
       labelTextColor: Color(0xFFFFFFFF),
       labelBackgroundColor: Color(0xE67C3AED),
+      labelTextScaleFactor: 1.5,
       child: SizedBox(width: 48, height: 48),
     );
 
@@ -116,6 +121,7 @@ void main() {
       'pinColor': 0xFF7C3AED,
       'labelTextColor': 0xFFFFFFFF,
       'labelBackgroundColor': 0xE67C3AED,
+      'labelTextScaleFactor': 1.5,
       'imageBytes': null,
       'imageWidth': null,
       'imageHeight': null,

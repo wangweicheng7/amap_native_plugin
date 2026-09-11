@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -41,6 +40,18 @@ class AmapNative {
         .then(
           (places) => places.map(AmapPlace.fromJson).toList(growable: false),
         );
+  }
+
+  /// Android 上模拟器可能会在创建高德地图原生视图时触发 EGL 崩溃。
+  /// 探测失败时保守返回 true，沿用原生渲染路径。
+  static Future<bool> shouldUseNativeMap() async {
+    try {
+      final result = await const MethodChannel('amap_native_plugin')
+          .invokeMethod<bool>('shouldUseNativeMap');
+      return result == true;
+    } catch (_) {
+      return true;
+    }
   }
 }
 
@@ -133,11 +144,15 @@ class AmapMapPin {
     this.snippet,
     this.draggable = false,
     this.label,
-    this.pinColor = const Color(0xFFF97316),
+    // 中性灰：降级兜底针不得落在「状态色板」里。宿主应用用针色编码安全状态
+    // （绿=安全 / 琥珀=警告 / 红=离开安全区），原先的橙 #F97316 夹在警告与危险之间，
+    // 会把「位图没画出来」误读成「宠物出事了」。
+    this.pinColor = const Color(0xFF9E9E9E),
     this.labelTextColor = Colors.white,
     this.labelBackgroundColor = const Color(0xE62D3748),
+    this.labelTextScaleFactor = 1,
     this.child,
-  });
+  }) : assert(labelTextScaleFactor > 0 && labelTextScaleFactor <= 4);
 
   final AmapLatLng position;
   final String? title;
@@ -147,6 +162,12 @@ class AmapMapPin {
   final Color pinColor;
   final Color labelTextColor;
   final Color labelBackgroundColor;
+
+  /// Controls the native label's font and container scale.
+  ///
+  /// The native implementations do not read the platform font scale. Callers
+  /// that want scalable labels should pass the scale selected by Flutter.
+  final double labelTextScaleFactor;
   final Widget? child;
 
   Map<String, Object?> toJson() => _toJson();
@@ -166,6 +187,7 @@ class AmapMapPin {
       'pinColor': pinColor.toARGB32(),
       'labelTextColor': labelTextColor.toARGB32(),
       'labelBackgroundColor': labelBackgroundColor.toARGB32(),
+      'labelTextScaleFactor': labelTextScaleFactor,
       'imageBytes': imageBytes,
       'imageWidth': imageWidth,
       'imageHeight': imageHeight,
@@ -220,6 +242,18 @@ class AmapMapController {
       'padding': padding,
     });
   }
+
+  Future<void> zoomBy(double amount) {
+    return _channel.invokeMethod<void>('zoomBy', <String, Object?>{
+      'amount': amount,
+    });
+  }
+
+  /// 截取当前地图视图的截图（原生高德 SDK 渲染内容，包括瓦片和所有覆盖物）。
+  /// 返回 PNG 格式的字节数据，失败时返回 null。
+  Future<Uint8List?> takeSnapshot() {
+    return _channel.invokeMethod<Uint8List>('takeSnapshot');
+  }
 }
 
 class AmapMapView extends StatefulWidget {
@@ -233,6 +267,9 @@ class AmapMapView extends StatefulWidget {
     this.pins = const <AmapMapPin>[],
     this.polylines = const <AmapMapPolyline>[],
     this.showMyLocation = false,
+    this.visible = true,
+    this.useTextureView = true,
+    this.zoomControlsEnabled = true,
     this.centerPin,
     this.movingCenterPin,
     this.onCameraMove,
@@ -250,6 +287,13 @@ class AmapMapView extends StatefulWidget {
   final List<AmapMapPin> pins;
   final List<AmapMapPolyline> polylines;
   final bool showMyLocation;
+  final bool visible;
+
+  /// Android 默认使用高德 TextureMapView，避免业务页面意外退回 GLSurfaceView。
+  final bool useTextureView;
+
+  /// Android 是否显示高德原生放大/缩小控件。
+  final bool zoomControlsEnabled;
   final Widget? centerPin;
   final Widget? movingCenterPin;
   final AmapCameraChangedCallback? onCameraMove;
@@ -279,6 +323,9 @@ class _AmapMapViewState extends State<AmapMapView> {
       'pins': _pinsJson,
       'polylines': _polylinesJson,
       'showMyLocation': widget.showMyLocation,
+      'visible': widget.visible,
+      'useTextureView': widget.useTextureView,
+      'zoomControlsEnabled': widget.zoomControlsEnabled,
     };
   }
 
@@ -341,7 +388,7 @@ class _AmapMapViewState extends State<AmapMapView> {
       _viewChannel?.invokeMethod<void>(
         'updateCircleGeofences',
         <String, Object?>{'circleGeofences': _circleGeofencesJson},
-      );
+      ).catchError((Object _) {});
     }
 
     if (pinDefinitionsChanged) {
@@ -352,53 +399,57 @@ class _AmapMapViewState extends State<AmapMapView> {
     if (!listEquals(oldWidget.polylines, widget.polylines)) {
       _viewChannel?.invokeMethod<void>('updatePolylines', <String, Object?>{
         'polylines': _polylinesJson,
-      });
+      }).catchError((Object _) {});
       if (!pinDefinitionsChanged && _movingPinUpdatesJson.isNotEmpty) {
         _viewChannel?.invokeMethod<void>('updateMovingPins', <String, Object?>{
           'updates': _movingPinUpdatesJson,
-        });
+        }).catchError((Object _) {});
       }
+    }
+
+    // creationParams 只在原生视图创建的那一刻被读一次,之后 Flutter 侧再改
+    // showMyLocation 原生是收不到的 —— 调用方「首帧用原生蓝点兜底、拿到定位后
+    // 切自绘针」的意图会只生效一半:蓝点开了就永远关不掉,与自绘针并存。
+    if (oldWidget.visible != widget.visible && widget.visible) {
+      _updateNativeVisibility();
+    }
+    if (oldWidget.showMyLocation != widget.showMyLocation) {
+      _viewChannel?.invokeMethod<void>('updateMyLocation', <String, Object?>{
+        'showMyLocation': widget.showMyLocation,
+      }).catchError((Object _) {});
+    }
+    if (oldWidget.visible != widget.visible && !widget.visible) {
+      _updateNativeVisibility();
     }
   }
 
   @override
   void dispose() {
     _viewChannel?.setMethodCallHandler(null);
+    // Android 的 PlatformViewsController 会先把原生 View 从树中摘除，再调用
+    // PlatformView.dispose。不要从 Dart 提前销毁 TextureMapView：否则后续 detach
+    // 会进入高德 GLTextureView 的同步等待，部分真机会直接 ANR。
+    _viewChannel = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     Widget view;
-    if (Platform.isAndroid) {
-      view = PlatformViewLink(
+    // 用 defaultTargetPlatform 而非 dart:io 的 Platform.isAndroid：后者在 widget
+    // 测试里恒为宿主机（Linux/macOS），平台视图分支永远走不到，于是「widget 变化
+    // → 方法通道下发」这类接线根本无法被测试覆盖 —— showMyLocation 关不掉正是
+    // 藏在这个测不到的分支后面。本仓 geolocator_phone_location_service 早已按同
+    // 一理由选择 defaultTargetPlatform。
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      view = AndroidView(
         viewType: AmapMapView._viewType,
-        surfaceFactory: (context, controller) {
-          return AndroidViewSurface(
-            controller: controller as AndroidViewController,
-            hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-            gestureRecognizers:
-                widget.gestureRecognizers ??
-                const <Factory<OneSequenceGestureRecognizer>>{},
-          );
-        },
-        onCreatePlatformView: (params) {
-          final controller = PlatformViewsService.initSurfaceAndroidView(
-            id: params.id,
-            viewType: AmapMapView._viewType,
-            layoutDirection: Directionality.of(context),
-            creationParams: _creationParams,
-            creationParamsCodec: const StandardMessageCodec(),
-            onFocus: () => params.onFocusChanged(true),
-          );
-          controller.addOnPlatformViewCreatedListener(
-            params.onPlatformViewCreated,
-          );
-          controller.addOnPlatformViewCreatedListener(_onPlatformViewCreated);
-          return controller;
-        },
+        creationParams: _creationParams,
+        creationParamsCodec: const StandardMessageCodec(),
+        gestureRecognizers: widget.gestureRecognizers,
+        onPlatformViewCreated: _onPlatformViewCreated,
       );
-    } else if (Platform.isIOS) {
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
       view = UiKitView(
         viewType: AmapMapView._viewType,
         creationParams: _creationParams,
@@ -415,14 +466,21 @@ class _AmapMapViewState extends State<AmapMapView> {
       );
     }
 
+    final retainedView = IgnorePointer(
+      ignoring: !widget.visible,
+      child: Opacity(
+        opacity: widget.visible ? 1 : 0,
+        child: _withPinRenderers(_withCenterPin(view)),
+      ),
+    );
     if (widget.width == null && widget.height == null) {
-      return _withPinRenderers(_withCenterPin(view));
+      return retainedView;
     }
 
     return SizedBox(
       width: widget.width,
       height: widget.height,
-      child: _withPinRenderers(_withCenterPin(view)),
+      child: retainedView,
     );
   }
 
@@ -431,15 +489,27 @@ class _AmapMapViewState extends State<AmapMapView> {
     _viewChannel?.setMethodCallHandler(_handlePlatformViewCall);
     _viewChannel?.invokeMethod<void>('updateCircleGeofences', <String, Object?>{
       'circleGeofences': _circleGeofencesJson,
-    });
+    }).catchError((Object _) {});
     _viewChannel?.invokeMethod<void>('updatePins', <String, Object?>{
       'pins': _pinsJson,
-    });
+    }).catchError((Object _) {});
     _schedulePinRendering();
     _viewChannel?.invokeMethod<void>('updatePolylines', <String, Object?>{
       'polylines': _polylinesJson,
-    });
+    }).catchError((Object _) {});
+    // 与其它图层一致地重推一次:creationParams 是首帧快照,视图创建完成前 widget
+    // 可能已经重建过(定位回调常在此窗口内到达)。
+    _viewChannel?.invokeMethod<void>('updateMyLocation', <String, Object?>{
+      'showMyLocation': widget.showMyLocation,
+    }).catchError((Object _) {});
+    _updateNativeVisibility();
     widget.onMapCreated?.call(id);
+  }
+
+  void _updateNativeVisibility() {
+    _viewChannel?.invokeMethod<void>('setVisible', <String, Object?>{
+      'visible': widget.visible,
+    }).catchError((Object _) {});
   }
 
   Future<void> _handlePlatformViewCall(MethodCall call) async {
@@ -491,15 +561,11 @@ class _AmapMapViewState extends State<AmapMapView> {
     final pin = _isCameraMoving
         ? widget.movingCenterPin ?? widget.centerPin
         : widget.centerPin;
-    if (pin == null) {
-      return mapView;
-    }
-
     return Stack(
       fit: StackFit.expand,
       children: [
-        mapView,
-        IgnorePointer(child: Center(child: pin)),
+        Positioned.fill(child: mapView),
+        if (pin != null) IgnorePointer(child: Center(child: pin)),
       ],
     );
   }
@@ -520,15 +586,14 @@ class _AmapMapViewState extends State<AmapMapView> {
         ),
       );
     }
-    if (renderers.isEmpty) {
-      return mapView;
-    }
-
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
         ...renderers,
-        Positioned.fill(child: mapView),
+        Positioned.fill(
+          key: const ValueKey('amap-native-view-slot'),
+          child: mapView,
+        ),
       ],
     );
   }
@@ -567,8 +632,21 @@ class _AmapMapViewState extends State<AmapMapView> {
         continue;
       }
       final renderObject = renderKeys[index].currentContext?.findRenderObject();
-      if (renderObject is! RenderRepaintBoundary ||
-          renderObject.debugNeedsPaint) {
+      if (renderObject is! RenderRepaintBoundary) {
+        _schedulePinRendering();
+        return;
+      }
+      // `debugNeedsPaint` 只有 debug 构建可读 —— 它的实现是 `late bool` + assert，
+      // release/profile 下 assert 被剥离，读取即抛 LateInitializationError。而本方法
+      // 由 `unawaited(_renderPins(...))` 调起，异常被静默吞掉，`_renderedPins` 永不赋值，
+      // 结果是所有带 child 的针都拿不到位图、退化成默认针。
+      // release 视为「已绘制」是安全的：_renderPins 本就跑在 post-frame 回调里。
+      var needsPaint = false;
+      assert(() {
+        needsPaint = renderObject.debugNeedsPaint;
+        return true;
+      }());
+      if (needsPaint) {
         _schedulePinRendering();
         return;
       }
@@ -596,9 +674,13 @@ class _AmapMapViewState extends State<AmapMapView> {
       return;
     }
     _renderedPins = renderedPins;
-    await _viewChannel?.invokeMethod<void>('updatePins', <String, Object?>{
-      'pins': _pinsJson,
-    });
+    try {
+      await _viewChannel?.invokeMethod<void>('updatePins', <String, Object?>{
+        'pins': _pinsJson,
+      });
+    } catch (_) {
+      // 视图销毁竞态：dispose 后 channel 已失效，放弃本次针位图补发。
+    }
   }
 
   List<AmapMapPin> _pinDefinitions(AmapMapView mapView) {

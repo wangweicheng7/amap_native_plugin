@@ -1,6 +1,7 @@
 import AMapFoundationKit
 import AMapSearchKit
 import CoreLocation
+import Foundation
 import Flutter
 import MAMapKit
 import UIKit
@@ -177,6 +178,7 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
   private var pinStyles: [ObjectIdentifier: CustomPinStyle] = [:]
   private var routePolylines: [MAPolyline] = []
   private var routePolylineStyles: [ObjectIdentifier: PolylineStyle] = [:]
+  private var disposed = false
 
   init(
     frame: CGRect,
@@ -184,15 +186,43 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
     binaryMessenger: FlutterBinaryMessenger,
     arguments args: Any?
   ) {
+#if DEBUG
+    let mapInitStartedAt = ProcessInfo.processInfo.systemUptime
+#endif
     mapView = MAMapView(frame: frame)
+#if DEBUG
+    let mapInitDuration = (ProcessInfo.processInfo.systemUptime - mapInitStartedAt) * 1000
+#endif
     channel = FlutterMethodChannel(
       name: "amap_native_plugin/map_view_\(viewId)",
       binaryMessenger: binaryMessenger
     )
     super.init()
+#if DEBUG
+    print(
+      "[amap.performance] phase=map_view_constructor duration_ms=\(String(format: "%.1f", mapInitDuration)) main_thread=\(Thread.isMainThread)"
+    )
+#endif
     mapView.delegate = self
     channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "dispose" {
+        self?.disposeMap()
+        result(nil)
+        return
+      }
+      guard self?.disposed == false else {
+        result(FlutterError(code: "map_disposed", message: "Map view has already been disposed", details: nil))
+        return
+      }
       switch call.method {
+      case "updateMyLocation":
+        let args = call.arguments as? [String: Any]
+        self?.mapView.showsUserLocation = args?["showMyLocation"] as? Bool ?? false
+        result(nil)
+      case "setVisible":
+        let args = call.arguments as? [String: Any]
+        self?.mapView.isHidden = !(args?["visible"] as? Bool ?? true)
+        result(nil)
       case "updateCircleGeofences":
         let args = call.arguments as? [String: Any]
         self?.updateCircleGeofences(args?["circleGeofences"] as? [[String: Any]])
@@ -226,15 +256,45 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
         )
         self?.mapView.setZoomLevel(CGFloat(zoom), animated: true)
         result(nil)
+      case "zoomBy":
+        let args = call.arguments as? [String: Any]
+        guard let amount = args?["amount"] as? Double else {
+          result(FlutterError(code: "invalid_arguments", message: "amount is required", details: nil))
+          return
+        }
+        let targetZoom = (self?.mapView.zoomLevel ?? 15) + CGFloat(amount)
+        self?.mapView.setZoomLevel(targetZoom, animated: true)
+        result(nil)
       case "fitAllOverlays":
         let args = call.arguments as? [String: Any]
         self?.fitAllOverlays(padding: CGFloat((args?["padding"] as? Double) ?? 48))
         result(nil)
+      case "takeSnapshot":
+        guard let self else {
+          result(nil)
+          return
+        }
+        self.mapView.takeSnapshot(in: self.mapView.bounds, timeoutInterval: 5) { image, _ in
+          guard let image, let data = image.pngData() else {
+            result(nil)
+            return
+          }
+          result(FlutterStandardTypedData(bytes: data))
+        }
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+#if DEBUG
+    let initialLayersStartedAt = ProcessInfo.processInfo.systemUptime
+#endif
     applyCreationParams(args as? [String: Any])
+#if DEBUG
+    let initialLayersDuration = (ProcessInfo.processInfo.systemUptime - initialLayersStartedAt) * 1000
+    print(
+      "[amap.performance] phase=initial_layers duration_ms=\(String(format: "%.1f", initialLayersDuration)) main_thread=\(Thread.isMainThread)"
+    )
+#endif
   }
 
   private func fitAllOverlays(padding: CGFloat) {
@@ -263,7 +323,16 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
   }
 
   deinit {
+    disposeMap()
+  }
+
+  private func disposeMap() {
+    guard !disposed else { return }
+    disposed = true
     channel.setMethodCallHandler(nil)
+    mapView.delegate = nil
+    mapView.showsUserLocation = false
+    removeAllMapContent()
   }
 
   func view() -> UIView {
@@ -273,6 +342,7 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
   private func applyCreationParams(_ params: [String: Any]?) {
     removeAllMapContent()
     mapView.showsUserLocation = params?["showMyLocation"] as? Bool ?? false
+    mapView.isHidden = !(params?["visible"] as? Bool ?? true)
     drawCircleGeofences(params?["circleGeofences"] as? [[String: Any]])
     drawPins(params?["pins"] as? [[String: Any]])
     drawPolylines(params?["polylines"] as? [[String: Any]])
@@ -387,9 +457,11 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
           label: label,
           image: assetImage,
           pinSize: assetImage == nil ? CGSize(width: 32, height: 42) : CGSize(width: imageWidth, height: imageHeight),
-          pinColor: uiColor(from: pin["pinColor"], fallback: UIColor(red: 0.97, green: 0.45, blue: 0.09, alpha: 1)),
+          // 中性灰兜底：降级针不得落进宿主应用的状态色板（绿/琥珀/红）
+          pinColor: uiColor(from: pin["pinColor"], fallback: UIColor(white: 0.62, alpha: 1)),
           textColor: uiColor(from: pin["labelTextColor"], fallback: .white),
-          backgroundColor: uiColor(from: pin["labelBackgroundColor"], fallback: UIColor(red: 0.18, green: 0.22, blue: 0.28, alpha: 0.9))
+          backgroundColor: uiColor(from: pin["labelBackgroundColor"], fallback: UIColor(red: 0.18, green: 0.22, blue: 0.28, alpha: 0.9)),
+          labelTextScaleFactor: normalizedLabelTextScaleFactor(pin["labelTextScaleFactor"])
         )
       }
       pinAnnotations.append(annotation)
@@ -513,9 +585,9 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
     let pinWidth = style.pinSize.width
     let pinHeight = style.pinSize.height
     let gap: CGFloat = 6
-    let labelHeight: CGFloat = 32
-    let horizontalPadding: CGFloat = 10
-    let font = UIFont.boldSystemFont(ofSize: 14)
+    let labelHeight: CGFloat = 32 * style.labelTextScaleFactor
+    let horizontalPadding: CGFloat = 10 * style.labelTextScaleFactor
+    let font = UIFont.boldSystemFont(ofSize: 14 * style.labelTextScaleFactor)
     let attributes: [NSAttributedString.Key: Any] = [
       .font: font,
       .foregroundColor: style.textColor
@@ -529,7 +601,12 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
 
     return UIGraphicsImageRenderer(size: size).image { _ in
       if let pinImage = style.image {
-        pinImage.draw(in: CGRect(origin: .zero, size: style.pinSize))
+        // 默认标签高 32pt，而「我的位置」圆点只有 22pt。短图标需要在合成画布
+        // 内垂直居中；否则只是顶边对齐，视觉中心会比标签高 5pt。
+        let pinTop = max(0, (size.height - pinHeight) / 2)
+        pinImage.draw(
+          in: CGRect(x: 0, y: pinTop, width: pinWidth, height: pinHeight)
+        )
       } else {
         style.pinColor.setFill()
         let triangle = UIBezierPath()
@@ -561,6 +638,12 @@ final class AmapPlatformMapView: NSObject, FlutterPlatformView, MAMapViewDelegat
         (label as NSString).draw(in: textRect, withAttributes: attributes)
       }
     }
+  }
+
+  private func normalizedLabelTextScaleFactor(_ value: Any?) -> CGFloat {
+    guard let number = value as? NSNumber else { return 1 }
+    let scale = CGFloat(truncating: number)
+    return scale.isFinite && scale > 0 ? min(scale, 4) : 1
   }
 
   private func removeAllCircleGeofenceOverlays() {
@@ -735,4 +818,5 @@ private struct CustomPinStyle {
   let pinColor: UIColor
   let textColor: UIColor
   let backgroundColor: UIColor
+  let labelTextScaleFactor: CGFloat
 }
