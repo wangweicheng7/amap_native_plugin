@@ -1,3 +1,10 @@
+## 0.1.3
+
+- Add TextureMapView support with lifecycle-safe pause, resume, and disposal.
+- Add native map visibility updates, zoom controls, and PNG snapshots.
+- Add release-safe marker rendering and consumer R8 rules for the AMap SDK.
+- Add emulator-aware native map availability checks.
+
 ## 0.1.2
 
 - Add native input-tip place search on Android and iOS through `AmapNative.searchPlaces`.
