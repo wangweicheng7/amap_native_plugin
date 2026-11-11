@@ -28,8 +28,9 @@ void main() {
     await platform.init(
       androidApiKey: 'android-key',
       iosApiKey: 'ios-key',
-      androidPrivacyShown: false,
-      androidPrivacyAgreed: true,
+      ohosApiKey: 'ohos-key',
+      privacyShown: false,
+      privacyAgreed: true,
     );
 
     expect(calls, hasLength(1));
@@ -37,39 +38,18 @@ void main() {
     expect(calls.single.arguments, <String, Object?>{
       'androidApiKey': 'android-key',
       'iosApiKey': 'ios-key',
+      'ohosApiKey': 'ohos-key',
+      'privacyShown': false,
+      'privacyAgreed': true,
       'androidPrivacyShown': false,
       'androidPrivacyAgreed': true,
     });
   });
 
-  test('searchPlaces maps native results', () async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (methodCall) async {
-          calls.add(methodCall);
-          return <Map<String, Object?>>[
-            <String, Object?>{
-              'name': '成都市',
-              'latitude': 30.5728,
-              'longitude': 104.0668,
-              'district': '四川省成都市',
-              'address': '',
-            },
-          ];
-        });
-
-    final places = await platform.searchPlaces(
-      '成都市',
-      latitude: 30.5728,
-      longitude: 104.0668,
-    );
-
-    expect(calls.single.method, 'searchPlaces');
-    expect(calls.single.arguments, <String, Object?>{
-      'keyword': '成都市',
-      'latitude': 30.5728,
-      'longitude': 104.0668,
-    });
-    expect(places.single['name'], '成都市');
+  test('init does not imply user privacy consent', () async {
+    await platform.init(ohosApiKey: 'ohos-key');
+    expect(calls.single.arguments, containsPair('privacyShown', false));
+    expect(calls.single.arguments, containsPair('privacyAgreed', false));
   });
 
   test('pins update is forwarded to the platform view channel', () async {

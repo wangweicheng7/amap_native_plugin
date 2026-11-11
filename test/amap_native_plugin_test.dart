@@ -6,36 +6,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-class MockAmapNativePluginPlatform
-    with MockPlatformInterfaceMixin
-    implements AmapNativePluginPlatform {
+class MockAmapNativePluginPlatform extends AmapNativePluginPlatform
+    with MockPlatformInterfaceMixin {
   bool initialized = false;
 
   @override
   Future<void> init({
     String? androidApiKey,
     String? iosApiKey,
-    bool androidPrivacyShown = true,
-    bool androidPrivacyAgreed = true,
+    String? ohosApiKey,
+    bool privacyShown = false,
+    bool privacyAgreed = false,
   }) async {
     initialized = true;
-  }
-
-  @override
-  Future<List<Map<Object?, Object?>>> searchPlaces(
-    String keyword, {
-    double? latitude,
-    double? longitude,
-  }) async {
-    return <Map<Object?, Object?>>[
-      <Object?, Object?>{
-        'name': keyword,
-        'latitude': 30.5728,
-        'longitude': 104.0668,
-        'district': '四川省成都市',
-        'address': '',
-      },
-    ];
   }
 }
 
@@ -57,20 +40,6 @@ void main() {
     await AmapNative.init(androidApiKey: 'android-key', iosApiKey: 'ios-key');
 
     expect(fakePlatform.initialized, isTrue);
-  });
-
-  test('searchPlaces maps platform data', () async {
-    final fakePlatform = MockAmapNativePluginPlatform();
-    AmapNativePluginPlatform.instance = fakePlatform;
-
-    final places = await AmapNative.searchPlaces(
-      '成都市',
-      location: const AmapLatLng(30.5728, 104.0668),
-    );
-
-    expect(places.single.name, '成都市');
-    expect(places.single.latitude, 30.5728);
-    expect(places.single.longitude, 104.0668);
   });
 
   test('circle geofence serializes drawing parameters', () {
@@ -145,6 +114,7 @@ void main() {
       ],
       'color': 0xFFFF5B00,
       'width': 6,
+      'dashed': false,
     });
   });
 

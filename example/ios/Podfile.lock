@@ -3,8 +3,11 @@ PODS:
     - AMapFoundation (>= 1.9.0)
   - amap_native_plugin (0.1.0):
     - AMap3DMap
+    - AMapSearch
     - Flutter
   - AMapFoundation (1.9.0)
+  - AMapSearch (9.8.0):
+    - AMapFoundation (>= 1.9.0)
   - Flutter (1.0.0)
 
 DEPENDENCIES:
@@ -15,6 +18,7 @@ SPEC REPOS:
   trunk:
     - AMap3DMap
     - AMapFoundation
+    - AMapSearch
 
 EXTERNAL SOURCES:
   amap_native_plugin:
@@ -24,8 +28,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AMap3DMap: 940c6f6ce6ff3089c5c2211b0dfb51ef43262fe8
-  amap_native_plugin: 569ae1de3e1a89d2db996e9ca4fa8a2cc696231d
+  amap_native_plugin: 3dad120682bf4c1e4432060e50ee42101f51039c
   AMapFoundation: 5f01fcabd1e591967e52178d2d96dac843396285
+  AMapSearch: ec339fc3cf772d5ff657f02397888391b4b1bde8
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
 
 PODFILE CHECKSUM: 47a757a7853adf00f34d8294fd2037725e0d47ac

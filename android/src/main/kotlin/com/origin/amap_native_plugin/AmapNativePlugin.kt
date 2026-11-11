@@ -3,14 +3,7 @@ package com.origin.amap_native_plugin
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
-import android.os.Build
 import com.amap.api.maps.MapsInitializer
-import com.amap.api.services.core.AMapException
-import com.amap.api.services.core.LatLonPoint
-import com.amap.api.services.core.ServiceSettings
-import com.amap.api.services.help.Inputtips
-import com.amap.api.services.help.InputtipsQuery
-import java.util.Locale
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -45,80 +38,21 @@ class AmapNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
             "init" -> {
-                val androidPrivacyShown = call.argument<Boolean>("androidPrivacyShown") ?: true
-                val androidPrivacyAgreed = call.argument<Boolean>("androidPrivacyAgreed") ?: true
+                val privacyShown = call.argument<Boolean>("privacyShown")
+                    ?: call.argument<Boolean>("androidPrivacyShown")
+                    ?: false
+                val privacyAgreed = call.argument<Boolean>("privacyAgreed")
+                    ?: call.argument<Boolean>("androidPrivacyAgreed")
+                    ?: false
                 val androidApiKey = call.argument<String>("androidApiKey")
 
-                MapsInitializer.updatePrivacyShow(applicationContext, true, androidPrivacyShown)
-                MapsInitializer.updatePrivacyAgree(applicationContext, androidPrivacyAgreed)
-                ServiceSettings.updatePrivacyShow(applicationContext, true, androidPrivacyShown)
-                ServiceSettings.updatePrivacyAgree(applicationContext, androidPrivacyAgreed)
+                MapsInitializer.updatePrivacyShow(applicationContext, privacyShown, privacyShown)
+                MapsInitializer.updatePrivacyAgree(applicationContext, privacyAgreed)
                 setApiKeyIfSupported(androidApiKey)
                 result.success(null)
             }
-            "searchPlaces" -> searchPlaces(call, result)
-            "shouldUseNativeMap" -> result.success(!isEmulator())
             else -> result.notImplemented()
         }
-    }
-
-    private fun isEmulator(): Boolean {
-        val fingerprint = (Build.FINGERPRINT ?: "").lowercase(Locale.ROOT)
-        val model = (Build.MODEL ?: "").lowercase(Locale.ROOT)
-        val brand = (Build.BRAND ?: "").lowercase(Locale.ROOT)
-        val manufacturer = (Build.MANUFACTURER ?: "").lowercase(Locale.ROOT)
-        val product = (Build.PRODUCT ?: "").lowercase(Locale.ROOT)
-        val hardware = (Build.HARDWARE ?: "").lowercase(Locale.ROOT)
-        return fingerprint.startsWith("generic") ||
-            fingerprint.startsWith("unknown") ||
-            model.contains("sdk_gphone") ||
-            model.contains("emulator") ||
-            model.contains("android sdk") ||
-            brand.startsWith("generic") ||
-            brand == "generic_x86" ||
-            manufacturer.contains("genymotion") ||
-            product == "sdk" ||
-            product == "sdk_x86" ||
-            product == "sdk_gphone_x86" ||
-            hardware == "goldfish" ||
-            hardware == "ranchu" ||
-            hardware == "vbox86"
-    }
-
-    private fun searchPlaces(call: MethodCall, result: Result) {
-        val keyword = call.argument<String>("keyword")?.trim().orEmpty()
-        if (keyword.length < 2) {
-            result.success(emptyList<Map<String, Any>>())
-            return
-        }
-
-        val query = InputtipsQuery(keyword, "").apply {
-            cityLimit = false
-            val latitude = call.argument<Double>("latitude")
-            val longitude = call.argument<Double>("longitude")
-            if (latitude != null && longitude != null) {
-                location = LatLonPoint(latitude, longitude)
-            }
-        }
-        val inputtips = Inputtips(applicationContext, query)
-        inputtips.setInputtipsListener { tips, code ->
-            if (code != AMapException.CODE_AMAP_SUCCESS) {
-                result.error("AMAP_SEARCH_$code", "地点搜索失败（$code）", null)
-                return@setInputtipsListener
-            }
-            val places = tips.orEmpty().mapNotNull { tip ->
-                val point = tip.point ?: return@mapNotNull null
-                mapOf(
-                    "name" to tip.name.orEmpty(),
-                    "latitude" to point.latitude,
-                    "longitude" to point.longitude,
-                    "district" to tip.district.orEmpty(),
-                    "address" to tip.address.orEmpty(),
-                )
-            }
-            result.success(places)
-        }
-        inputtips.requestInputtipsAsyn()
     }
 
     /// Activity 生命周期桥接：把宿主 Activity 的 onResume/onPause 广播给所有活跃
@@ -186,7 +120,6 @@ class AmapNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
 
         runCatching {
-            ServiceSettings.getInstance().setApiKey(apiKey)
             MapsInitializer::class.java
                 .getMethod("setApiKey", String::class.java)
                 .invoke(null, apiKey)

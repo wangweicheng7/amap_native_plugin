@@ -32,4 +32,17 @@ migrate_working_dir/
 /build/
 /coverage/
 
-MIGRATION_PLAN_APP_SYNC.md
+
+# Local tooling and generated native artifacts are not package sources.
+.fvm/
+.fvmrc
+.vscode/
+nexus.sh
+**/oh_modules/
+**/.hvigor/
+**/build/
+**/har/
+**/libs/
+**/oh-package-lock.json5
+**/BuildProfile.ets
+**/*.har

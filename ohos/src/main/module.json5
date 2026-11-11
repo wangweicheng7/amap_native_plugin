@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "amap_native_plugin",
+    "type": "har",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ]
+  }
+}

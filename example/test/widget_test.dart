@@ -4,6 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('input tab displays a text field', (tester) async {
+    await tester.pumpWidget(const MyApp());
+
+    await tester.tap(find.text('输入框'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
   testWidgets('random pin page draws three geofences and one pin', (
     tester,
   ) async {
@@ -12,7 +21,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('三围栏随机大头针判断'),
       200,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey<String>('examples-list')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.tap(find.text('三围栏随机大头针判断'));
     await tester.pumpAndSettle();

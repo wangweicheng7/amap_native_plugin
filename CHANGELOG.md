@@ -1,3 +1,12 @@
+## 0.1.4
+
+* Split Dart and native code into map view, overlays, marker rendering and lifecycle responsibilities.
+* Add HarmonyOS native AMap SDK support with an isolated Dart platform entry.
+* Add dashed polylines and refresh asynchronous Flutter marker images without recreating maps.
+* **Breaking:** remove place search and device/emulator fallback APIs from the core map plugin.
+* **Breaking:** privacy state now defaults to false; retain deprecated Android parameter aliases.
+* Add bounded, single-completion snapshot controllers with lifecycle cancellation.
+
 ## 0.1.3
 
 - Add TextureMapView support with lifecycle-safe pause, resume, and disposal.

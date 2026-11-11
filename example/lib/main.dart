@@ -6,11 +6,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  AmapNative.init(
+  await AmapNative.init(
     androidApiKey: const String.fromEnvironment('AMAP_ANDROID_API_KEY'),
+    privacyShown: true,
+    privacyAgreed: true,
+    ohosApiKey: const String.fromEnvironment('AMAP_OHOS_API_KEY'),
     iosApiKey: const String.fromEnvironment('AMAP_IOS_API_KEY'),
   );
 
@@ -37,51 +40,153 @@ class ExamplesHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('AMap Native Plugin Examples')),
-      body: ListView(
-        children: [
-          ExampleListTile(
-            title: '基础地图',
-            subtitle: '展示一个可交互的原生高德地图。',
-            builder: (_) => const BasicMapPage(),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          title: const Text('AMap Native Plugin Examples'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: '示例'),
+              Tab(text: '输入框'),
+            ],
           ),
-          ExampleListTile(
-            title: '固定尺寸地图',
-            subtitle: '把地图作为固定宽高的小组件嵌入页面。',
-            builder: (_) => const FixedSizeMapPage(),
+        ),
+        body: const TabBarView(
+          children: [
+            _KeepAliveTab(child: _ExamplesListView()),
+            _KeepAliveTab(child: _InputPage()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KeepAliveTab extends StatefulWidget {
+  const _KeepAliveTab({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAliveTab> createState() => _KeepAliveTabState();
+}
+
+class _KeepAliveTabState extends State<_KeepAliveTab>
+    with AutomaticKeepAliveClientMixin<_KeepAliveTab> {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+class _ExamplesListView extends StatelessWidget {
+  const _ExamplesListView();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      key: const ValueKey<String>('examples-list'),
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+          child: Text(
+            '圆形地理围栏地图',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
-          ExampleListTile(
-            title: '圆形地理围栏',
-            subtitle: '绘制中心点和半径固定的圆形围栏。',
-            builder: (_) => const StaticGeofencePage(),
+        ),
+        const SizedBox(
+          height: 280,
+          child: AmapMapView(
+            initialCenter: StaticGeofencePage._center,
+            initialZoom: 13,
+            centerPin: _CenterPin(color: Color(0xFF2563EB)),
+            circleGeofences: [
+              AmapCircleGeofence(
+                center: StaticGeofencePage._center,
+                radiusMeters: 800,
+                strokeColor: Color(0xFF2563EB),
+                fillColor: Color(0x332563EB),
+                strokeWidth: 4,
+              ),
+              AmapCircleGeofence(
+                center: AmapLatLng(30.289, 120.166),
+                radiusMeters: 500,
+                strokeColor: Color(0xFF16A34A),
+                fillColor: Color(0x3316A34A),
+                strokeWidth: 3,
+              ),
+            ],
           ),
-          ExampleListTile(
-            title: '地图中心围栏编辑',
-            subtitle: '拖动地图选择中心点，滑块实时调整围栏半径。',
-            builder: (_) => const GeofenceEditorPage(),
+        ),
+        const SizedBox(height: 16),
+        ExampleListTile(
+          title: '基础地图',
+          subtitle: '展示一个可交互的原生高德地图。',
+          builder: (_) => const BasicMapPage(),
+        ),
+        ExampleListTile(
+          title: '固定尺寸地图',
+          subtitle: '把地图作为固定宽高的小组件嵌入页面。',
+          builder: (_) => const FixedSizeMapPage(),
+        ),
+        ExampleListTile(
+          title: '圆形地理围栏',
+          subtitle: '绘制中心点和半径固定的圆形围栏。',
+          builder: (_) => const StaticGeofencePage(),
+        ),
+        ExampleListTile(
+          title: '地图中心围栏编辑',
+          subtitle: '拖动地图选择中心点，滑块实时调整围栏半径。',
+          builder: (_) => const GeofenceEditorPage(),
+        ),
+        ExampleListTile(
+          title: '地图大头针放置',
+          subtitle: '点击地图在原生层放置一个大头针。',
+          builder: (_) => const PinPlacementPage(),
+        ),
+        ExampleListTile(
+          title: '围栏大头针示例',
+          subtitle: '一个地理围栏，围栏内外各放置大头针。',
+          builder: (_) => const GeofencePinDemoPage(),
+        ),
+        ExampleListTile(
+          title: '动态轨迹与移动大头针',
+          subtitle: '逐点绘制轨迹，大头针始终跟随轨迹末端移动。',
+          builder: (_) => const DynamicTrackPage(),
+        ),
+        ExampleListTile(
+          title: '三围栏随机大头针判断',
+          subtitle: '绘制三个围栏，随机放置大头针并判断是否位于围栏内。',
+          builder: (_) => const RandomPinGeofencePage(),
+        ),
+      ],
+    );
+  }
+}
+
+class _InputPage extends StatelessWidget {
+  const _InputPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: TextField(
+            decoration: InputDecoration(
+              labelText: '请输入内容',
+              border: OutlineInputBorder(),
+            ),
           ),
-          ExampleListTile(
-            title: '地图大头针放置',
-            subtitle: '点击地图在原生层放置一个大头针。',
-            builder: (_) => const PinPlacementPage(),
-          ),
-          ExampleListTile(
-            title: '围栏大头针示例',
-            subtitle: '一个地理围栏，围栏内外各放置大头针。',
-            builder: (_) => const GeofencePinDemoPage(),
-          ),
-          ExampleListTile(
-            title: '动态轨迹与移动大头针',
-            subtitle: '逐点绘制轨迹，大头针始终跟随轨迹末端移动。',
-            builder: (_) => const DynamicTrackPage(),
-          ),
-          ExampleListTile(
-            title: '三围栏随机大头针判断',
-            subtitle: '绘制三个围栏，随机放置大头针并判断是否位于围栏内。',
-            builder: (_) => const RandomPinGeofencePage(),
-          ),
-        ],
+        ),
       ),
     );
   }
