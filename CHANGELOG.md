@@ -1,3 +1,8 @@
+## 0.1.5
+
+* Fix HarmonyOS snapshots blocked by unavailable layout dimensions or a potentially missed map-loaded event.
+* Require a visible foreground map, SDK rendering-complete status, and finite positive PixelMap dimensions before encoding snapshot PNGs.
+
 ## 0.1.4
 
 * Split Dart and native code into map view, overlays, marker rendering and lifecycle responsibilities.

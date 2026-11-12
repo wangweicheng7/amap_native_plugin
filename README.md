@@ -69,7 +69,7 @@ await AmapNative.init(
 三个平台使用各自申请的移动 SDK Key。鸿蒙 Key 对应宿主包名、签名及高德开放平台配置；不使用 Web Service Key。
 旧 `androidPrivacyShown` / `androidPrivacyAgreed` 参数保留为弃用兼容参数，新接入使用通用参数。
 0.1.4 移除搜索和设备策略 API，并将隐私状态默认值改为 false，包含不兼容变化。
-当前公开包名为 amap_native_plugin，版本 0.1.4；省略 publish_to，发布时使用 PUB_HOSTED_URL=https://pub.dev。
+当前公开包名为 amap_native_plugin，版本 0.1.5；省略 publish_to，发布时使用 PUB_HOSTED_URL=https://pub.dev。
 
 ```dart
 AmapMapController? controller;
@@ -113,6 +113,8 @@ final png = await controller?.takeSnapshot();
 
 截图只包含原生 SDK 地图与覆盖物，不包含 Flutter 按钮、`centerPin`、弹窗和分享卡片。
 SDK 无图或超时返回 null；地图未就绪、隐藏、销毁或截图并发时通过平台错误报告。
+鸿蒙截图要求地图实例存在、宿主处于前台且视图可见；以 SDK 截图回调的 `status == 1` 确认渲染完成，
+并通过 `PixelMap.getImageInfo()` 校验图像尺寸为有限正数后编码 PNG，不依赖布局尺寸回调或可能漏发的地图加载事件。
 瓦片、图片标记及最终视觉效果需用有效 Key 在真机验证，编译通过不代替地图验收。
 
 ## 平台依赖与宿主配置
@@ -187,7 +189,11 @@ flutter run --dart-define=AMAP_ANDROID_API_KEY=... --dart-define=AMAP_IOS_API_KE
 该探针使用本机调试签名、仅用于构建；若包名复用现有应用，不应直接覆盖安装。
 
 当前验证包括 17 项插件测试、2 项示例测试、通用 Dart 静态分析、Swift 语法检查和隔离鸿蒙 HAP 编译。
-Android/iOS 构建以及有效 Key 的地图展示、相机/覆盖物/截图、生命周期真机验收仍待完成。
+鸿蒙隔离 App 已在真机验证地图瓦片、头像 marker、拖动与双击缩放、500 米虚线圆围栏、Tab 切换与前后台恢复。
+0.1.5 已修复 0.1.4 的截图失败，轨迹页分享预览完整显示地图 PNG 和统计卡片。
+本次无真实轨迹点，轨迹线和回放动画尚未验证；分享发送和保存相册尚未验证。
+正式 App 仍使用 `^0.1.4` 约束并锁定 0.1.4，待发布 0.1.5 后定向升级锁文件；上述结果来自隔离 App。
+Android/iOS 构建与真机验收仍待完成。
 公开发布使用 `PUB_HOSTED_URL=https://pub.dev dart pub publish --dry-run`，审核归档后执行同来源的 `dart pub publish`。
 `.pubignore` 排除本地发布脚本、FVM、IDE、SDK HAR 和构建缓存。
 

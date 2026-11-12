@@ -1,6 +1,6 @@
 {
   "name": "amap_native_plugin",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Native AMap rendering for Flutter on HarmonyOS.",
   "main": "index.ets",
   "license": "MIT",

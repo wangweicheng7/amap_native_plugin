@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'amap_native_plugin'
-  s.version          = '0.1.4'
+  s.version          = '0.1.5'
   s.summary          = 'Flutter plugin for native AMap map views.'
   s.description      = <<-DESC
 Flutter plugin for native AMap views with pins, polylines, and circle geofences on Android and iOS.

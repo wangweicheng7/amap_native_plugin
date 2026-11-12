@@ -16,7 +16,6 @@ struct AmapComponent {
   build() {
     MapViewComponent({ mapViewName: this.customView.mapViewName })
       .width('100%').height('100%')
-      .onAreaChange((_old: Area, area: Area) => this.customView.setSize(Number(area.width), Number(area.height)))
   }
 }
 @Builder
@@ -33,9 +32,6 @@ export class AmapPlatformView extends PlatformView implements MethodCallHandler 
   private hostActive: boolean;
   private requestedVisible: boolean;
   private resumed: boolean = false;
-  private mapLoaded: boolean = false;
-  private width: number = 0;
-  private height: number = 0;
   private snapshot?: MethodResult;
   private snapshotTimeout?: number;
   private readonly created = (view?: MapView, name?: string): void => {
@@ -45,7 +41,6 @@ export class AmapPlatformView extends PlatformView implements MethodCallHandler 
     view.getMapAsync((map: AMap): void => {
       if (this.disposed) return;
       this.map = map;
-      map.setOnMapLoadedListener(() => { if (!this.disposed) this.mapLoaded = true; });
       this.overlays = new OverlayRenderer(map);
       map.getUiSettings()?.setZoomControlsEnabled(false);
       map.setOnCameraChangeListener(new OnCameraChangeListener(
@@ -76,7 +71,6 @@ export class AmapPlatformView extends PlatformView implements MethodCallHandler 
   }
 
   getView(): WrappedBuilder<[Params]> { return new WrappedBuilder(mapBuilder); }
-  setSize(width: number, height: number): void { this.width = width; this.height = height; }
   setHostActive(active: boolean): void { this.hostActive = active; this.syncLifecycle(); }
 
   onMethodCall(call: MethodCall, result: MethodResult): void { this.handle(call, result); }
@@ -167,8 +161,14 @@ export class AmapPlatformView extends PlatformView implements MethodCallHandler 
   }
 
   private takeSnapshot(result: MethodResult): void {
-    if (this.map === undefined || !this.mapLoaded || !this.resumed || this.width <= 0 || this.height <= 0) {
-      result.error('map_not_ready', 'Snapshot requires a visible, foreground map with non-zero size.', null); return;
+    if (this.map === undefined || this.disposed || !this.resumed || !this.hostActive || !this.requestedVisible) {
+      result.error('map_not_ready', 'Snapshot requires a visible, foreground map instance.', new Map<string, Object>([
+        ['mapPresent', this.map !== undefined],
+        ['resumed', this.resumed],
+        ['hostActive', this.hostActive],
+        ['requestedVisible', this.requestedVisible],
+        ['disposed', this.disposed]
+      ])); return;
     }
     if (this.snapshot !== undefined) { result.error('snapshot_in_progress', 'A snapshot is already pending.', null); return; }
     this.snapshot = result;
@@ -185,6 +185,12 @@ export class AmapPlatformView extends PlatformView implements MethodCallHandler 
     if (pending === undefined || bitmap === undefined) { this.finishSnapshot(null); return; }
     const packer = image.createImagePacker();
     try {
+      const info = await bitmap.getImageInfo();
+      if (this.snapshot !== pending) return;
+      if (!Number.isFinite(info.size.width) || !Number.isFinite(info.size.height) || info.size.width <= 0 || info.size.height <= 0) {
+        this.finishSnapshot(null);
+        return;
+      }
       const bytes = await packer.packing(bitmap, { format: 'image/png', quality: 100 });
       if (this.snapshot === pending) this.finishSnapshot(new Uint8Array(bytes));
     } catch (cause) { if (this.snapshot === pending) this.finishSnapshot(null, 'snapshot_failed', (cause as Error).message); }
