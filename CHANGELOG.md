@@ -1,3 +1,10 @@
+## 1.0.0
+
+- 新增 AmapSearch.searchPlaces 与 reverseGeocode，统一 Android、iOS、鸿蒙的原生搜索 SDK。
+- 地点建议保留可空坐标，地址解析保留空字段与无结果语义。
+- 搜索请求支持独立回调、超时与分离清理，统一异常分类并保留 SDK 错误码。
+- iOS 新增 AMapSearch ~> 9.8，鸿蒙新增 @amap/amap_lbs_search 11.2.1。
+
 ## 0.1.5
 
 * Fix HarmonyOS snapshots blocked by unavailable layout dimensions or a potentially missed map-loaded event.

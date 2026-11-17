@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.StandardMessageCodec
 
 class AmapNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
+    private lateinit var search: AmapSearchHandler
     private lateinit var channel: MethodChannel
     private lateinit var applicationContext: android.content.Context
     private var mapViewFactory: AmapMapViewFactory? = null
@@ -22,6 +23,7 @@ class AmapNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         applicationContext = flutterPluginBinding.applicationContext
+        search = AmapSearchHandler(applicationContext)
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "amap_native_plugin")
         channel.setMethodCallHandler(this)
 
@@ -49,8 +51,10 @@ class AmapNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 MapsInitializer.updatePrivacyShow(applicationContext, privacyShown, privacyShown)
                 MapsInitializer.updatePrivacyAgree(applicationContext, privacyAgreed)
                 setApiKeyIfSupported(androidApiKey)
+                search.initialize(androidApiKey, privacyShown, privacyAgreed)
                 result.success(null)
             }
+            "searchPlaces", "reverseGeocode", "cancelSearch" -> search.handle(call, result)
             else -> result.notImplemented()
         }
     }
@@ -111,6 +115,7 @@ class AmapNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
         activityCallbacks = null
         mapViewFactory = null
+        search.dispose()
         channel.setMethodCallHandler(null)
     }
 

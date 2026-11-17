@@ -1,13 +1,14 @@
 {
   "name": "amap_native_plugin",
-  "version": "0.1.5",
-  "description": "Native AMap rendering for Flutter on HarmonyOS.",
+  "version": "1.0.0",
+  "description": "Native AMap rendering and search for Flutter on HarmonyOS.",
   "main": "index.ets",
   "license": "MIT",
   "dependencies": {
     "@ohos/flutter_ohos": "file:libs/flutter.har",
     "@amap/amap_lbs_map3d": "11.2.1",
     "@amap/amap_lbs_common": "11.2.1",
+    "@amap/amap_lbs_search": "11.2.1",
     "@amap/amap_lbs_location": "11.2.1"
   }
 }

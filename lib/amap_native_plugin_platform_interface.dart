@@ -35,6 +35,20 @@ abstract class AmapNativePluginPlatform extends PlatformInterface {
     bool privacyAgreed = false,
   }) => throw UnimplementedError('init() has not been implemented.');
 
+  Future<List<Object?>> searchPlaces({
+    required String keyword,
+    Map<String, Object?>? location,
+    String? city,
+    bool cityLimit = false,
+    required Duration timeout,
+  }) => throw UnimplementedError('searchPlaces() has not been implemented.');
+
+  Future<Map<Object?, Object?>?> reverseGeocode({
+    required Map<String, Object?> position,
+    required double radiusMeters,
+    required Duration timeout,
+  }) => throw UnimplementedError('reverseGeocode() has not been implemented.');
+
   Widget buildMapView({
     required Map<String, Object?> creationParams,
     required PlatformViewCreatedCallback onPlatformViewCreated,

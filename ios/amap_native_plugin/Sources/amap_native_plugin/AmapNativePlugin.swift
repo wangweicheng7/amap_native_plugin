@@ -4,6 +4,8 @@ import Foundation
 import MAMapKit
 
 public class AmapNativePlugin: NSObject, FlutterPlugin {
+  private let search = AmapSearchHandler()
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "amap_native_plugin", binaryMessenger: registrar.messenger())
     registrar.addMethodCallDelegate(AmapNativePlugin(), channel: channel)
@@ -14,6 +16,10 @@ public class AmapNativePlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if ["searchPlaces", "reverseGeocode", "cancelSearch"].contains(call.method) {
+      search.handle(call, result: result)
+      return
+    }
     guard call.method == "init" else {
       result(FlutterMethodNotImplemented)
       return
@@ -33,6 +39,10 @@ public class AmapNativePlugin: NSObject, FlutterPlugin {
     if let iosApiKey = args?["iosApiKey"] as? String, !iosApiKey.isEmpty {
       AMapServices.shared().apiKey = iosApiKey
     }
+    search.initialize(shown: privacyShown, agreed: privacyAgreed)
     result(nil)
+  }
+  public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+    search.dispose()
   }
 }

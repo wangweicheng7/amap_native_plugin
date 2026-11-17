@@ -6,10 +6,10 @@
 
 ## 职责边界
 
-保留：地图展示、相机移动/缩放、点/线/圆覆盖物、点击与相机事件、自定义 marker 图片、原生地图 PNG 截图、可见性和生命周期。
+提供地图展示、相机移动/缩放、点/线/圆覆盖物、点击与相机事件、自定义 marker 图片、原生地图 PNG 截图、可见性和生命周期，以及原生地点输入提示与逆地理编码。
 
 宿主负责：SDK Key、用户隐私同意、运行时权限、页面路由、定位业务与数据上传、轨迹采集/回放调度、围栏告警、分享卡片和第三方分享。
-地点搜索、逆地理编码属于地理搜索服务；本轮移除 `searchPlaces` / `AmapPlace`，不把 App 副本新增的 `reverseGeocode` 迁入地图核心。
+地点搜索和逆地理编码由独立的 `AmapSearch` 模块调用各平台原生搜索 SDK，查询可以在创建地图视图前执行。
 `shouldUseNativeMap` / `isMapRendererSupported` 的模拟器启发式也不作为插件能力；它不能证明设备实际渲染结果。
 
 `AmapCircleGeofence` 保留已有类型名称，但只表示圆形绘制参数及 `contains` 几何计算，不注册系统围栏，不产生进出事件。
@@ -21,15 +21,17 @@
 lib/
   amap_native_plugin.dart                    # 公共入口及初始化
   amap_native_plugin_platform_interface.dart # 平台协议
-  amap_native_plugin_method_channel.dart     # SDK 初始化通道
+  amap_native_plugin_method_channel.dart     # 初始化与搜索请求通道
   src/
     models/map_overlays.dart                 # 坐标、marker、polyline、circle
     map_controller.dart                      # 相机与截图控制
     map_view.dart                            # PlatformView、事件、可见性
+    search.dart                             # 搜索 API、输入校验与结果模型
     marker_renderer.dart                     # Flutter marker 转 PNG
     ohos/amap_ohos.dart                       # 鸿蒙专属 Flutter 视图入口
 android/.../amap_native_plugin/
   AmapNativePlugin.kt                        # 注册与初始化
+  AmapSearchHandler.kt                       # Android 搜索请求与生命周期
   AmapMapViewFactory.kt                      # 创建与宿主生命周期
   AmapPlatformMapView.kt                     # 相机、事件、方法通道
   NativeMapView.kt                           # Surface / Texture 适配
@@ -38,6 +40,7 @@ android/.../amap_native_plugin/
   AmapSnapshotController.kt                  # 有限时、一次完成的截图请求
 ios/.../amap_native_plugin/
   AmapNativePlugin.swift
+  AmapSearchHandler.swift                    # iOS 搜索请求与生命周期
   AmapMapViewFactory.swift
   AmapPlatformMapView.swift
   AmapOverlayController.swift
@@ -45,6 +48,7 @@ ios/.../amap_native_plugin/
   AmapSnapshotController.swift
 ohos/
   src/main/ets/                             # 原生注册、视图、覆盖物与标记
+    AmapSearchHandler.ets                    # 鸿蒙搜索请求与生命周期
 ```
 
 鸿蒙 Dart 入口通过 `dartPluginClass` / `dartFileName` 自动注册，主入口不导入 `OhosView`，
@@ -69,7 +73,7 @@ await AmapNative.init(
 三个平台使用各自申请的移动 SDK Key。鸿蒙 Key 对应宿主包名、签名及高德开放平台配置；不使用 Web Service Key。
 旧 `androidPrivacyShown` / `androidPrivacyAgreed` 参数保留为弃用兼容参数，新接入使用通用参数。
 0.1.4 移除搜索和设备策略 API，并将隐私状态默认值改为 false，包含不兼容变化。
-当前公开包名为 amap_native_plugin，版本 0.1.5；省略 publish_to，发布时使用 PUB_HOSTED_URL=https://pub.dev。
+当前公开包名为 amap_native_plugin，版本 1.0.0；省略 publish_to，发布时使用 PUB_HOSTED_URL=https://pub.dev。
 
 ```dart
 AmapMapController? controller;
@@ -117,6 +121,41 @@ SDK 无图或超时返回 null；地图未就绪、隐藏、销毁或截图并�
 并通过 `PixelMap.getImageInfo()` 校验图像尺寸为有限正数后编码 PNG，不依赖布局尺寸回调或可能漏发的地图加载事件。
 瓦片、图片标记及最终视觉效果需用有效 Key 在真机验证，编译通过不代替地图验收。
 
+## 地点搜索与地址解析
+
+先调用 `AmapNative.init`，传入对应平台 Key 并确认用户隐私同意。搜索复用该 Key，
+同时配置原生搜索 SDK 的隐私状态。Key 需要具备对应平台及搜索服务授权。
+
+```dart
+final places = await AmapSearch.searchPlaces(
+  keyword: '人民公园',
+  location: const AmapLatLng(30.67, 104.06),
+  city: '成都',
+  cityLimit: false,
+);
+
+final address = await AmapSearch.reverseGeocode(
+  position: const AmapLatLng(30.67, 104.06),
+  radiusMeters: 200,
+);
+```
+
+- 所有坐标均为 GCJ-02。搜索不触发定位权限申请，偏置坐标由调用方提供。
+- `searchPlaces` 为输入提示，关键词去除两端空白后为 1–80 个 UTF-16 单元。
+  `city` 可选；启用 `cityLimit` 时必须提供城市。返回供应商顺序的建议，
+  `AmapPlace.position` 可空，调用方按选点要求筛选并限制显示数量。
+- `reverseGeocode` 返回 `AmapAddress?`，半径为 1–3000 米，默认 200 米。
+  无地址返回 null；直辖市等可能返回空 city，字段保留 SDK 语义。
+- 两个接口默认超时 15 秒，允许 1–60000 毫秒。各请求具有独立 ID 与原生对象，
+  并发回调不会串用结果；超时和 Flutter engine 分离后释放待处理结果，
+  忽略迟到回调。SDK 支持取消时同步取消底层请求，其余平台仅结束插件请求。
+- 异常通过 `PlatformException` 返回，code 包括 `not_initialized`、
+  `invalid_argument`、`auth_error`、`rate_limited`、`network_error`、
+  `timeout`、`cancelled`、`sdk_error`；供应商错误码保存在
+  `details['vendorCode']`。Dart 参数校验失败抛出 `ArgumentError`。
+- 原生 SDK 搜索仍受高德服务授权、配额和网络限制，空列表与错误分别处理。
+  UI 防抖、过期查询丢弃、候选列表及围栏业务由宿主负责。
+
 ## 平台依赖与宿主配置
 
 ### Android
@@ -127,21 +166,20 @@ SDK 无图或超时返回 null；地图未就绪、隐藏、销毁或截图并�
 implementation("com.amap.api:3dmap-location-search:11.1.200_loc11.1.200_sea9.7.4")
 ```
 
-插件不暴露搜索 API；厂商 JAR 合包仍包含其组件。本次核对 Maven Central 的纯 `3dmap` 元数据，
-未发现相同 11.1.200 版本，因此没有为减小依赖而静默降级 SDK。SDK 升级或切换纯地图发行物需另行验证。
+地图与搜索共用上述合包，搜索使用 `Inputtips` 和 `GeocodeSearch`。SDK 升级或拆分发行物需要独立验证。
 consumer R8 规则随插件提供，保留实际需要的反射、JNI 和已知可选依赖规则，不迁入 App 的 Gradle/Kotlin 降级配置。
 宿主需提供网络权限；使用蓝点时自行申请位置权限。初始化 Key 可以代替 Manifest 中的默认 Key 配置。
 
 ### iOS
 
-CocoaPods 依赖 `AMap3DMap` 与 Flutter；本轮移除 `AMapSearch` 依赖。
+CocoaPods 依赖 `AMap3DMap`、`AMapSearch ~> 9.8` 与 Flutter；搜索使用 `AMapSearchAPI`。
 使用地图蓝点前，宿主配置 Info.plist 位置用途并取得权限。插件不会弹宿主隐私流程或启动后台定位。
 本轮仅完成 Swift 语法检查，没有进行 iOS 构建和真机验收。
 
 ### HarmonyOS
 
 使用社区 Flutter `ohos/3.44.9+ohos-1.0.0-beta`、DevEco Studio 和高德官方 OHPM SDK。
-地图、common、location 依赖固定为 `11.2.1`；由 OHPM 解析，SDK HAR 与原生二进制不提交到仓库。
+地图、common、location、search 依赖固定为 `11.2.1`；由 OHPM 解析，SDK HAR 与原生二进制不提交到仓库。
 地图 SDK 依赖 location 组件，不等于插件提供独立定位 API。
 每个 PlatformView 有独立名称、通道和覆盖物状态，SDK 全局回调按名称过滤，并在销毁时注销。
 
@@ -164,7 +202,7 @@ CocoaPods 依赖 `AMap3DMap` 与 Flutter；本轮移除 `AMapSearch` 依赖。
 | --- | --- |
 | 折线 dashed | 迁入 Dart 及各平台基础线覆盖物 |
 | 异步 child marker 首帧后重绘 | 迁入，并补单任务执行与空尺寸保护 |
-| reverseGeocode / AmapRegeocode | 不迁入；属于地理搜索服务 |
+| reverseGeocode / AmapRegeocode | 由独立 AmapSearch 模块及统一 AmapAddress 模型承接 |
 | isMapRendererSupported 改名 | 不迁入；移除模拟器启发式策略 |
 | release debugNeedsPaint 防护、相机状态回写、TextureMapView、标签缩放及定位 | 主仓库已有，保留修复 |
 | App 的单一生命周期状态 | 不覆盖主仓库已有的 hostActive / requestedVisible 双状态管理 |
@@ -173,7 +211,7 @@ CocoaPods 依赖 `AMap3DMap` 与 Flutter；本轮移除 `AMapSearch` 依赖。
 ## 验证与发布
 
 验证范围为插件和隔离探针，正式 App 集成与有效 Key 真机验收分别进行。
-当前例子中的已有 UI 改动保留；未为 App 集成回退保留搜索 API。
+搜索模块验证参数边界、无坐标建议、空结果、并发隔离、超时取消及 SDK 原始错误码。
 
 ```sh
 # 使用已安装的 Flutter SDK，在插件根目录运行
@@ -188,12 +226,14 @@ flutter run --dart-define=AMAP_ANDROID_API_KEY=... --dart-define=AMAP_IOS_API_KE
 鸿蒙采用隔离的最小宿主进行 HAP 编译，校验 Dart 自动注册、原生 PlatformView 和高德动态库打包。
 该探针使用本机调试签名、仅用于构建；若包名复用现有应用，不应直接覆盖安装。
 
-当前验证包括 17 项插件测试、2 项示例测试、通用 Dart 静态分析、Swift 语法检查和隔离鸿蒙 HAP 编译。
+当前插件的 24 项测试与 Dart 静态分析通过。新增搜索代码已通过隔离 Android Debug AAR、鸿蒙签名 Debug HAP 构建，以及 Swift 语法和 podspec Ruby 语法检查。
+本机只有 Apple Command Line Tools，缺少完整 Xcode 和 CocoaPods，iOS 编译与 pod lib lint 待在具备工具链的环境执行；语法检查不等于 SDK 链接验证。
 鸿蒙隔离 App 已在真机验证地图瓦片、头像 marker、拖动与双击缩放、500 米虚线圆围栏、Tab 切换与前后台恢复。
 0.1.5 已修复 0.1.4 的截图失败，轨迹页分享预览完整显示地图 PNG 和统计卡片。
 本次无真实轨迹点，轨迹线和回放动画尚未验证；分享发送和保存相册尚未验证。
-正式 App 仍使用 `^0.1.4` 约束并锁定 0.1.4，待发布 0.1.5 后定向升级锁文件；上述结果来自隔离 App。
-Android/iOS 构建与真机验收仍待完成。
+搜索模块的 App 接入与有效 Key 真机查询待插件发布后进行。
+搜索的 Android/iOS 真机验收仍待完成，鸿蒙本轮完成构建验证。
+发布版本为 1.0.0，pubspec、CocoaPods 与 OHPM 元数据版本保持一致。
 公开发布使用 `PUB_HOSTED_URL=https://pub.dev dart pub publish --dry-run`，审核归档后执行同来源的 `dart pub publish`。
 `.pubignore` 排除本地发布脚本、FVM、IDE、SDK HAR 和构建缓存。
 

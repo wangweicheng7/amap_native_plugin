@@ -13,6 +13,7 @@ import MethodChannel, { MethodCallHandler, MethodResult } from '@ohos/flutter_oh
 import PlatformView from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformView';
 import PlatformViewFactory from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformViewFactory';
 import StandardMessageCodec from '@ohos/flutter_ohos/src/main/ets/plugin/common/StandardMessageCodec';
+import { AmapSearchHandler } from './AmapSearchHandler';
 import { AmapPlatformView } from './AmapPlatformView';
 
 class AmapViewFactory extends PlatformViewFactory {
@@ -50,6 +51,7 @@ class MapAbilityLifecycle extends AbilityLifecycleCallback {
 }
 
 export default class AmapNativePlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
+  private search?: AmapSearchHandler;
   private channel?: MethodChannel;
   private context?: common.Context;
   private factory?: AmapViewFactory;
@@ -60,6 +62,7 @@ export default class AmapNativePlugin implements FlutterPlugin, MethodCallHandle
   getUniqueClassName(): string { return 'AmapNativePlugin'; }
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     this.context = binding.getApplicationContext();
+    this.search = new AmapSearchHandler(this.context);
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'amap_native_plugin');
     this.channel.setMethodCallHandler(this);
     this.factory = new AmapViewFactory(binding.getBinaryMessenger());
@@ -94,10 +97,18 @@ export default class AmapNativePlugin implements FlutterPlugin, MethodCallHandle
     this.factory = undefined;
     this.channel?.setMethodCallHandler(null);
     this.channel = undefined;
+    this.search?.dispose();
+    this.search = undefined;
     this.context = undefined;
   }
   onMethodCall(call: MethodCall, result: MethodResult): void {
+    if (call.method === 'searchPlaces' || call.method === 'reverseGeocode' || call.method === 'cancelSearch') {
+      if (this.search === undefined) result.error('engine_detached', 'The Flutter engine is detached.', null);
+      else this.search.handle(call, result);
+      return;
+    }
     if (call.method !== 'init') { result.notImplemented(); return; }
+    this.search?.dispose();
     const context = this.context;
     const factory = this.factory;
     if (context === undefined || factory === undefined) { result.error('engine_detached', 'The Flutter engine is detached.', null); return; }
@@ -111,6 +122,7 @@ export default class AmapNativePlugin implements FlutterPlugin, MethodCallHandle
       MapsInitializer.updatePrivacyAgree(AMapPrivacyAgreeStatus.DidAgree, context);
       MapsInitializer.setApiKey(key.trim());
       MapsInitializer.initialize(context);
+      this.search?.initialize(key.trim());
       factory.initialized = true;
       result.success(null);
     } catch (cause) { result.error('initialization_failed', (cause as Error).message, null); }

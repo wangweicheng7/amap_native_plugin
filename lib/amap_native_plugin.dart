@@ -14,8 +14,9 @@ part 'src/models/map_overlays.dart';
 part 'src/map_controller.dart';
 part 'src/map_view.dart';
 part 'src/marker_renderer.dart';
+part 'src/search.dart';
 
-/// Initializes the map SDK. Location collection and search are host concerns.
+/// Initializes map and search SDKs with explicit host privacy consent.
 class AmapNative {
   AmapNative._();
 
